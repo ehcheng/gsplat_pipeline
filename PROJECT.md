@@ -63,10 +63,10 @@ The repository holds code and docs only. Everything specific to one deployment l
 
 | Component | Reference version | Role |
 | --- | --- | --- |
-| COLMAP | 4.2.0 CUDA (`be5e291`), official Windows release | Feature extraction, matching, sparse reconstruction, undistortion |
-| LichtFeld Studio | v0.5.3 (`d8c50c6`), GPL-3.0, built from source (section 4) | 3D Gaussian-splat training (headless), MCP automation server, viewer |
+| COLMAP | 4.2.1 CUDA (`bd1fcf6`), official Windows release | Feature extraction, matching, sparse reconstruction, undistortion |
+| LichtFeld Studio | v0.5.4.1 (`de2a94d5`), GPL-3.0, built from source (section 4) | 3D Gaussian-splat training (headless), MCP automation server, viewer |
 | PowerShell | 7.6 | Runs the pipeline scripts |
-| Node.js | 24.21 | Web-viewer scripts, Wrangler |
+| Node.js | 24.22 | Web-viewer scripts, Wrangler |
 | ffmpeg / ffprobe | 8.1 | Video frame sampling, contact sheets, JPEG/WebP encoding, video checks |
 | NVIDIA `nvidia-smi` | with driver | GPU and VRAM telemetry |
 
@@ -74,10 +74,10 @@ The repository holds code and docs only. Everything specific to one deployment l
 
 | Package | Version | Role |
 | --- | --- | --- |
-| `@playcanvas/splat-transform` | 3.4.0 | PLY → SOG conversion (GPU k-means SH compression), transforms, headless GPU rasterizer for thumbnails and contact sheets |
-| `@playcanvas/supersplat-viewer` | 1.31.1 | The browser viewer (WebGPU with WebGL fallback), patched at build time |
+| `@playcanvas/splat-transform` | 3.10.2 | PLY → SOG conversion (GPU k-means SH compression), transforms, headless GPU rasterizer for thumbnails and contact sheets |
+| `@playcanvas/supersplat-viewer` | 1.38.1 | The browser viewer (WebGPU with WebGL fallback), patched at build time |
 | `playcanvas` | 2.22.0 | Engine under both of the above |
-| `wrangler` | 4.130.0 | Cloudflare deploy, secrets, local dev server |
+| `wrangler` | 4.151.3 | Cloudflare deploy, secrets, local dev server |
 | `@cloudflare/workers-types` | ^5.20260908 | Worker typings |
 
 ### 3.3 Build toolchain (for LichtFeld only)
@@ -105,11 +105,12 @@ cmake --build build
 cmake --install build --prefix pipeline/tools/lichtfeld
 ```
 
-- The script clones the tagged source (default `v0.5.3`, submodules included) to `pipeline/tools/lichtfeld-src` and vcpkg to `pipeline/tools/vcpkg` when they are missing.
+- The script clones the tagged source (default `v0.5.4.1`, submodules included) to `pipeline/tools/lichtfeld-src` and vcpkg to `pipeline/tools/vcpkg` when they are missing, and switches an existing clean clone to the requested tag. `-InstallDir` installs elsewhere, for testing a new version next to the current one.
 - First configure about 50 minutes (vcpkg builds about 90 dependency ports); compile about 20 minutes on 64 threads. `-Reconfigure` wipes the build folder.
 - Output: `pipeline/tools/lichtfeld/bin/LichtFeld-Studio.exe`, portable layout, about 550 MB with bundled DLLs. Kernels ship as PTX and JIT-compile for the local GPU on first launch.
 - Gotchas handled by the script: `vcvars64.bat` needs the Visual Studio Installer folder on `PATH` to find `vswhere`; long paths must be enabled for vcpkg.
-- Verified: `--version` reports v0.5.3; `--help` exposes `--headless --train --strategy --max-cap --iter --gut`; the MCP server listens on `127.0.0.1:45677` in GUI mode.
+- v0.5.4 saves training as `project.licht` and writes `splat_<iter>.ply` only when asked; `run.ps1` passes `--export ply` whenever `--help` lists it.
+- Verified: `--version` reports v0.5.4.1; `--help` exposes `--headless --train --strategy --max-cap --iter --gut --export`; the MCP server listens on `127.0.0.1:45677` in GUI mode.
 
 **Discovery.** `run.ps1` and `reconstruct.ps1` take LichtFeld from `-LichtFeldPath`, else `LICHTFELD_PATH`, else PATH, else `pipeline/tools/lichtfeld/`. COLMAP follows the same pattern (`COLMAP_PATH`, PATH, `pipeline/tools/colmap*/`).
 
@@ -225,7 +226,7 @@ Output: `dist/3d/<slug>/{index.html, index.js, scene.sog, og.jpg, social.json, b
 
    Precedence is defaults, then the scene's `vr` block, then command-line flags. Every effective value is recorded in `vr/build.json`.
 
-Note on splat-transform 3.4.0: its GPU SOG writer crashes silently (`STATUS_STACK_BUFFER_OVERRUN`, `0xC0000409`) on odd splat counts, and its GPU-initialised decimation pass crashes the same way on some inputs. The builder therefore decimates with `--gpu cpu` and forces every target count even before the GPU SOG step.
+Note on splat-transform 3.4.0: its GPU SOG writer crashed silently (`STATUS_STACK_BUFFER_OVERRUN`, `0xC0000409`) on odd splat counts, and its GPU-initialised decimation pass crashed the same way on some inputs, so the builder decimated with `--gpu cpu`. 3.10.2 fixes both (checked at 499,999 splats), and the builder decimates on the GPU again; target counts are still kept even.
 
 ### 7.3 Viewer patch: `scripts/viewer-patch.mjs`
 

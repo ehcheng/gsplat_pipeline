@@ -3,15 +3,19 @@
 # where run.ps1 and reconstruct.ps1 look for it. Mirrors upstream .github/workflows/nightly.yml
 # (build-windows job). Needs the toolchain from install-toolchain.ps1 and git on PATH.
 #
-#   powershell -ExecutionPolicy Bypass -File pipeline\tools\installers\build-lichtfeld.ps1 [-Tag v0.5.3] [-Reconfigure]
+#   powershell -ExecutionPolicy Bypass -File pipeline\tools\installers\build-lichtfeld.ps1 [-Tag v0.5.4.1] [-InstallDir <dir>] [-Reconfigure]
 #
 # First run: clones the tagged source (with submodules) to pipeline/tools/lichtfeld-src and
 # vcpkg to pipeline/tools/vcpkg, then configures (about 50 min: vcpkg builds ~90 dependency
-# ports) and compiles (about 20 min on 64 threads). An existing source clone is used as is.
+# ports) and compiles (about 20 min on 64 threads). An existing clean source clone is switched
+# to -Tag; later builds reuse the build folder and vcpkg's cache, so an upgrade with an
+# unchanged vcpkg baseline is mostly compile time. -InstallDir installs somewhere other than
+# pipeline/tools/lichtfeld, to test a new version next to the current one (LICHTFELD_PATH).
 [CmdletBinding()]
 param(
-    [string] $Tag = 'v0.5.3',
+    [string] $Tag = 'v0.5.4.1',
     [string] $RepoUrl = 'https://github.com/MrNeRF/LichtFeld-Studio.git',
+    [string] $InstallDir,
     [switch] $Reconfigure,
     [string] $CudaPath = 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8'
 )
@@ -19,10 +23,15 @@ $ErrorActionPreference = 'Stop'
 $tools   = Split-Path -Parent $PSScriptRoot
 $src     = Join-Path $tools 'lichtfeld-src'
 $build   = Join-Path $src 'build'
-$dist    = Join-Path $tools 'lichtfeld'
+$dist    = if ($InstallDir) { [IO.Path]::GetFullPath($InstallDir) } else { Join-Path $tools 'lichtfeld' }
 $vcpkg   = Join-Path $tools 'vcpkg'
 $log     = Join-Path $PSScriptRoot 'build-lichtfeld.log'
-function Log($m) { $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m; Add-Content -Path $log -Value $line; Write-Host $line }
+# A log file another program holds open (an editor, a tail) must not stop an hour-long build.
+function Log($m) {
+    $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m
+    try { Add-Content -Path $log -Value $line -ErrorAction Stop } catch { Write-Warning "could not write $log ($($_.Exception.Message))" }
+    Write-Host $line
+}
 function Invoke-Git([string[]] $Arguments) {
     & git @Arguments
     if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed (exit $LASTEXITCODE)" }
@@ -42,7 +51,13 @@ if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     Invoke-Git @('clone', '--branch', $Tag, '--recurse-submodules', $RepoUrl, $src)
 } else {
     $current = (& git -C $src describe --tags 2>$null)
-    if ($current -ne $Tag) { Log "WARNING: $src is at '$current', not $Tag; building it as is. Delete the folder to re-clone." }
+    if ($current -ne $Tag) {
+        if (& git -C $src status --porcelain) { throw "$src is at '$current' with local changes; commit, stash or delete them before switching to $Tag." }
+        Log "Switching $src from '$current' to $Tag"
+        Invoke-Git @('-C', $src, 'fetch', '--tags', 'origin')
+        Invoke-Git @('-C', $src, 'checkout', '--detach', $Tag)
+        Invoke-Git @('-C', $src, 'submodule', 'update', '--init', '--recursive')
+    }
 }
 if (-not (Test-Path (Join-Path $vcpkg 'vcpkg.exe'))) {
     if (-not (Test-Path (Join-Path $vcpkg '.git'))) {

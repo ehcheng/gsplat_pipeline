@@ -106,10 +106,10 @@ const viewerBundle = join(project, 'node_modules', '@playcanvas', 'supersplat-vi
 const pristineBundle = readFileSync(viewerBundle, 'utf8');
 const gpu = process.env.SPLAT_GPU ?? '0';
 
-// splat-transform 3.4.0: the GPU SOG compressor dies with STATUS_STACK_BUFFER_OVERRUN
-// (0xC0000409, no message) when the splat count is odd, and its GPU-initialised decimation
-// pass dies the same way on some inputs. So decimation runs on the CPU (it is CPU work
-// anyway) and every target count is forced even before the GPU SOG step.
+// splat-transform 3.4.0 died with STATUS_STACK_BUFFER_OVERRUN (0xC0000409, no message) writing
+// SOG on the GPU from an odd splat count, and in GPU-initialised decimation. 3.10.2 handles both
+// (checked at 499,999 splats), and decimates 1.5 M splats on the GPU in about 9 s against 40 to
+// 70 s on the CPU. Targets are still kept even, which costs nothing.
 const transform = (args, what, device = gpu) => {
   const result = spawnSync(process.execPath, [cli, '--no-tty', '--gpu', device, '--overwrite', ...args], { stdio: 'inherit' });
   if (result.status !== 0) {
@@ -202,7 +202,7 @@ if (!flags['no-vr']) {
   const cull = vrOptions.minOpacity > 0 ? ['-V', `opacity,gt,${vrOptions.minOpacity}`] : [];
   // --decimate-adaptive has to be the last action and needs a PLY output, hence two passes.
   const target = vrOptions.splats - (vrOptions.splats % 2);
-  transform([source, ...actions, ...cull, vrOptions.decimate === 'uniform' ? '--decimate' : '--decimate-adaptive', String(target), vrPly], 'VR decimation', 'cpu');
+  transform([source, ...actions, ...cull, vrOptions.decimate === 'uniform' ? '--decimate' : '--decimate-adaptive', String(target), vrPly], 'VR decimation');
   transform([vrPly, '-H', String(vrOptions.sh), sog], 'VR SOG');
 
   // WebXR sessions cannot run on the viewer's WebGPU device (no XRGPUBinding in Quest's

@@ -139,7 +139,7 @@ Open `https://<your domain>/3d/park-bench/` in a private window. For password-pr
 ## Notes
 
 - `pipeline/tests/smoke.ps1` checks the `run.ps1` contract, tool discovery and lens resolution without a GPU.
-- `@playcanvas/splat-transform` 3.4.0 crashes silently (exit code `0xC0000409`) when writing SOG on the GPU from an odd number of splats, and its decimation crashes on some inputs when a GPU adapter is initialised. `build-viewer.mjs` and `wiggle.mjs` keep counts even and decimate on the CPU.
+- `@playcanvas/splat-transform` 3.4.0 crashed silently (exit code `0xC0000409`) writing SOG on the GPU from an odd number of splats, and in GPU decimation. 3.10.2 fixes both, so `build-viewer.mjs` and `wiggle.mjs` decimate on the GPU again (about 9 s for 1.5 M splats, against 40 to 70 s on the CPU); targets are still kept even.
 - Large single-camera sets (more than about 1,000 images) map much faster with COLMAP's `global_mapper` than with the incremental mapper; see `pipeline/docs/PIPELINE.md`.
 - Cloudflare limits each static file to 25 MiB. A larger `scene.sog` needs a lower `-MaxCap` or R2 storage.
 

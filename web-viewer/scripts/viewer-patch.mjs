@@ -42,7 +42,9 @@
 //
 // Quest's browser identifies as Linux, not Android, so the viewer treats it as a desktop and
 // renders the 2D page at full resolution with the desktop splat budget. Both builds default
-// Quest to the viewer's Performance Mode instead (the user can still switch it off).
+// Quest's Quality slider to Performance instead (the user can still move it). Stock 1.38 does
+// detect Quest for XR sessions (full foveation, 72 Hz, 0.8 framebuffer at Performance); the
+// /vr build overrides those with the values below.
 //
 // `node scripts/viewer-patch.mjs` re-patches every scene already in dist/3d (main and /vr) from
 // the pristine bundle in node_modules (then deploy).
@@ -172,6 +174,9 @@ class GamepadDevice {
         return null;
     }
     update(ctx, frame) {
+        // as stock: the gamepad belongs to the page, so only the instance the host enables reads it
+        if (!this._global?.state.inputEnabled)
+            return;
         const { dt, cameraComponent, isFly, isWalk, isFirstPerson, mode } = ctx;
         const { leftStick, rightStick } = this._source.read();
         const [mx, my] = this._shape(leftStick[0], leftStick[1], this._left);
@@ -325,8 +330,8 @@ export function patchViewerBundle(source, options = {}) {
   );
   patched = replaceOnce(
     patched,
-    "        const defaultMode = isObjectExperience ? 'orbit' : walkAllowed ? 'walk' : 'fly';\n",
-    "        const defaultMode = 'orbit'; // Orbit by default (scripts/viewer-patch.mjs)\n"
+    "        const defaultMode = () => (isObjectExperience ? 'orbit' : walkAllowed ? 'walk' : 'fly');\n",
+    "        const defaultMode = () => 'orbit'; // Orbit by default (scripts/viewer-patch.mjs)\n"
   );
   patched = replaceOnce(
     patched,
@@ -339,7 +344,8 @@ export function patchViewerBundle(source, options = {}) {
   patched = replaceOnce(patched, '        this._ctrl += key[keyCode.CTRL];\n', '        this._ctrl += key[keyCode.CTRL];\n' + KEY_LOOK_ACCUMULATE);
   const mouseRotateAdd = '        v.add(mouseRotate.mulScalar((1 - pan) * this.orbitSpeed * orbitFactor * this.mouseRotateSensitivity * DISPLACEMENT_SCALE));\n';
   patched = replaceOnce(patched, mouseRotateAdd, mouseRotateAdd + KEY_LOOK_APPLY);
-  patched = replaceOnce(patched, '        patchKeyboardMeta(this._source);\n', '        patchKeyboardMeta(this._source);\n        installKeyLookHelp();\n');
+  const keyboardMeta = '        patchKeyboardMeta(this._source, () => global.state.inputEnabled);\n';
+  patched = replaceOnce(patched, keyboardMeta, keyboardMeta + '        installKeyLookHelp();\n');
   // I/J/K/L switch to Fly like W/A/S/D: on desktop the mode shortcut also turns on gaming
   // controls (mouse look), and the device requests first person as Q/E and the arrows do.
   patched = replaceOnce(
@@ -354,25 +360,32 @@ export function patchViewerBundle(source, options = {}) {
     '        if (!isFirstPerson && (this._axis.length() > 0 || this._lookAxis[0] !== 0 || this._lookAxis[1] !== 0)) {\n'
   );
 
-  // Quest browser: default to Performance Mode (half-resolution canvas, mobile splat budget).
+  // Quest browser: default the Quality slider to Performance (the mobile canvas scale and splat
+  // budget). Stock treats Quest as a desktop because its browser reports one.
   patched = replaceOnce(
     patched,
-    "    const performanceMode = storedPerformanceMode !== null ? storedPerformanceMode === 'true' : platform.mobile;\n",
-    "    const performanceMode = storedPerformanceMode !== null ? storedPerformanceMode === 'true' : (platform.mobile || /OculusBrowser|\\bQuest\\b/u.test(navigator.userAgent));\n"
+    '    const preferences = readPreferences(platform.mobile);\n',
+    "    const preferences = readPreferences(platform.mobile || /OculusBrowser|\\bQuest\\b/u.test(navigator.userAgent)); // Quest: Performance (scripts/viewer-patch.mjs)\n"
   );
 
-  const hasAR = "        state.hasAR = app.xr.isAvailable('immersive-ar') || webglAR;\n";
-  const hasVR = "        state.hasVR = app.xr.isAvailable('immersive-vr') || webglVR;\n";
-  const xrStart = "        app.xr.start(app.root.findComponent('camera'), type, 'local-floor');\n";
+  const hasAR = '        state.hasAR = state.canStartAR || webglAR;\n';
+  const hasVR = '        state.hasVR = state.canStartVR || webglVR;\n';
+  const xrScale = '                    framebufferScaleFactor: quality.xrFramebufferScale,\n';
+  // Stock (1.38+) gives standalone headsets full foveation and 72 Hz, and a 0.8 framebuffer at
+  // Performance quality; the /vr build replaces those with the values tuned on a Quest 3.
+  const xrSessionTuning =
+    '        if (quality.xrFixedFoveation)\n            xr.fixedFoveation = 1;\n' +
+    '        const frameRate = quality.xrTargetFrameRate;\n' +
+    '        if (frameRate !== null && xr.supportedFrameRates?.includes(frameRate))\n            xr.updateTargetFrameRate(frameRate);\n';
+  const xrParamFn =
+    "(name, fallback) => { const p = new URL(location.href).searchParams; const v = Number(p.get(name)); return p.has(name) && Number.isFinite(v) ? v : fallback; }";
   if (xr) {
     // Keep the AR/VR buttons; render the XR session at a reduced framebuffer scale.
     // Runtime overrides for in-headset testing: ?fbscale=0.8&foveation=0&hz=90 on the /vr URL.
     patched = replaceOnce(
       patched,
-      xrStart,
-      '        const xrParams = new URL(location.href).searchParams;\n' +
-        '        const xrParam = (name, fallback) => { const v = Number(xrParams.get(name)); return xrParams.has(name) && Number.isFinite(v) ? v : fallback; };\n' +
-        `        app.xr.start(app.root.findComponent('camera'), type, 'local-floor', { framebufferScaleFactor: Math.min(1.5, Math.max(0.3, xrParam('fbscale', ${xrFramebufferScale}))) });\n`
+      xrScale,
+      `                    framebufferScaleFactor: Math.min(1.5, Math.max(0.3, (${xrParamFn})('fbscale', ${xrFramebufferScale}))), // (scripts/viewer-patch.mjs)\n`
     );
     patched = replaceOnce(patched, '        camera.camera.farClip = 1000;\n', `        camera.camera.farClip = ${xrFarClip}; // far shell must stay inside (scripts/viewer-patch.mjs)\n`);
     // Sort worker (its function body is serialised into the worker, so editing the source works).
@@ -384,13 +397,11 @@ export function patchViewerBundle(source, options = {}) {
     // Once the session runs: fixed foveation on the layer and a lower session frame rate.
     patched = replaceOnce(
       patched,
-      "    app.xr.on('start', () => {\n        app.autoRender = true;\n",
-      "    app.xr.on('start', () => {\n        app.autoRender = true;\n" +
-        '        // Quest performance levers (scripts/viewer-patch.mjs)\n' +
-        '        const xrParams = new URL(location.href).searchParams;\n' +
-        '        const xrParam = (name, fallback) => { const v = Number(xrParams.get(name)); return xrParams.has(name) && Number.isFinite(v) ? v : fallback; };\n' +
-        `        try { const fov = Math.min(1, Math.max(0, xrParam('foveation', ${xrFixedFoveation}))); app.xr.fixedFoveation = fov; } catch { /* layer without foveation */ }\n` +
-        `        try { const fr = xrParam('hz', ${xrFrameRate}); const rates = app.xr.supportedFrameRates; if (fr > 0 && rates && rates.includes(fr)) app.xr.updateTargetFrameRate(fr); } catch { /* not supported */ }\n`
+      xrSessionTuning,
+      '        // Quest performance levers (scripts/viewer-patch.mjs)\n' +
+        `        const xrParam = ${xrParamFn};\n` +
+        `        try { xr.fixedFoveation = Math.min(1, Math.max(0, xrParam('foveation', ${xrFixedFoveation}))); } catch { /* layer without foveation */ }\n` +
+        `        try { const fr = xrParam('hz', ${xrFrameRate}); const rates = xr.supportedFrameRates; if (fr > 0 && rates && rates.includes(fr)) xr.updateTargetFrameRate(fr); } catch { /* not supported */ }\n`
     );
   } else {
     // Main build: no AR/VR. The /vr build of the same scene carries them.

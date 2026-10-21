@@ -435,6 +435,9 @@ function Invoke-Train {
         $arguments += @('--mask-mode', $MaskMode)
         Write-Log "MASKS $masks files, mode $MaskMode."
     }
+    # v0.5.4 saves only project.licht unless asked for a splat file; --export ply restores
+    # lfs/splat_<iter>.ply, which frame.mjs and build-viewer.mjs read. v0.5.3 writes it unasked.
+    if ($help.Contains('--export')) { $arguments += @('--export', 'ply') }
     $stdout = Join-Path $script:LfsDir 'training.stdout.log'
     $stderr = Join-Path $script:LfsDir 'training.stderr.log'
     Write-Log "COMMAND $(Quote-Command $lichtfeld $arguments)"
@@ -455,6 +458,7 @@ function Invoke-Train {
     if ($process.ExitCode -ne 0) { throw "LichtFeld training failed with exit code $($process.ExitCode). See lfs/training.*.log." }
     $checkpoints = @(Get-ChildItem -LiteralPath $script:LfsDir -Recurse -File -Include '*.resume','*.licht' | Sort-Object LastWriteTime)
     if ($checkpoints.Count -eq 0) { throw 'Training exited successfully but wrote no .resume or .licht checkpoint.' }
+    if (-not (Test-Path -LiteralPath (Join-Path $script:LfsDir "splat_$Iterations.ply"))) { throw "Training exited successfully but wrote no lfs\splat_$Iterations.ply. Convert the checkpoint with: LichtFeld-Studio convert $($checkpoints[-1].FullName) $(Join-Path $script:LfsDir "splat_$Iterations.ply")" }
     $lossMatches = [regex]::Matches($trainingLog, '(?i)Loss:\s*([0-9.eE+-]+)')
     $finalLoss = if ($lossMatches.Count) { [double]::Parse($lossMatches[-1].Groups[1].Value,[Globalization.CultureInfo]::InvariantCulture) } else { $null }
     $metrics = [ordered]@{ completedAt=(Get-Date).ToString('o'); targetIteration=$Iterations; finalLoss=$finalLoss; wallTimeSeconds=[math]::Round($timer.Elapsed.TotalSeconds,2); peakVramMiB=$peakMiB; checkpoint=$checkpoints[-1].FullName; lens=$(if ($script:Capture) { $script:Capture.Lens } else { $null }); cameraModel=$CameraModel; gut=$gut; trainingDataset=$trainingDataset; strategy=$Strategy; maxCap=$MaxCap; maskMode=$MaskMode }
