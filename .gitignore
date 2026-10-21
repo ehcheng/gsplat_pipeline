@@ -1,0 +1,41 @@
+# --- your private site configuration (Cloudflare settings, scene registry, notes); template in site.example/
+/site/
+
+# --- scene data: captures, models, renders and per-scene logs
+/_workspace/
+
+# --- machine-local caches and state
+.pnpm-store/
+imgui.ini
+node_modules/
+
+# --- web-viewer: built scenes (rebuild with scripts/build-viewer.mjs), Wrangler auth and generated types
+web-viewer/dist/
+web-viewer/.wrangler-config/
+web-viewer/.wrangler/
+web-viewer/worker-configuration.d.ts
+.dev.vars*
+.env*
+
+# --- pipeline tools: binaries, source clones, vcpkg, downloads, logs (keep docs and install scripts)
+pipeline/tools/*
+!pipeline/tools/INSTALLS.md
+!pipeline/tools/installers/
+pipeline/tools/installers/*
+!pipeline/tools/installers/*.ps1
+
+# --- per-run history stays local
+pipeline/runs.jsonl
+pipeline/timings.json
+
+# --- bulk formats anywhere
+*.ply
+*.spz
+*.sog
+*.mp4
+*.mov
+*.jpg
+*.jpeg
+*.JPG
+*.zip
+*.exe

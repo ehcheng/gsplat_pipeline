@@ -1,0 +1,59 @@
+// Cloudflare Worker configuration for your site. Copy site.example/ to site/ and edit the copy;
+// site/ is gitignored. Paths are relative to this file. Commands in web-viewer/ pick this file up
+// through scripts/wrangler.mjs (pnpm run deploy, pnpm run check:deploy, ...).
+{
+  "$schema": "../web-viewer/node_modules/wrangler/config-schema.json",
+  // Worker name in your Cloudflare account.
+  "name": "gsplats",
+  // Your Cloudflare account ID: dashboard > Workers & Pages (right-hand column), or `pnpm run whoami`.
+  "account_id": "<your-cloudflare-account-id>",
+  // The Worker code and the built scenes stay in web-viewer/.
+  "main": "../web-viewer/src/index.js",
+  // The Worker imports its scene registry as "gsplat-scenes"; this points it at scenes.json here.
+  "alias": { "gsplat-scenes": "./scenes.json" },
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Option A (shown): serve scenes under your own domain, at https://example.com/3d/<slug>/.
+  // The domain must be a zone in the same Cloudflare account.
+  "routes": [
+    { "pattern": "example.com/3d/*", "zone_name": "example.com" },
+    { "pattern": "example.com/3d", "zone_name": "example.com" }
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  // Option B: no domain. Delete "routes" and set "workers_dev": true; scenes are then served at
+  // https://<name>.<your-subdomain>.workers.dev/3d/<slug>/.
+
+  "assets": {
+    "directory": "../web-viewer/dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    // Must stay true: the Worker's access checks run before any scene file is served.
+    "run_worker_first": true
+  },
+  "vars": {
+    // Shown as og:site_name in link previews and as the brand on the password page.
+    "SITE_NAME": "Example",
+    // Optional. The password page's brand links here, and the catalog export builds its URLs on it.
+    "SITE_URL": "https://example.com",
+    // Optional. /3d and /3d/ redirect (302) here, e.g. your site's gallery page; 404 when empty.
+    "GSPLAT_INDEX_URL": "",
+    // Login lifetime for protected scenes, in seconds (300 to 2592000).
+    "SESSION_TTL_SECONDS": "86400",
+    // Only needed for password-protected scenes: the public site key of your Turnstile widget.
+    // "1x00000000000000000000AA" is Cloudflare's always-pass test key for trying things out.
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    // Host name Turnstile must report; leave empty to accept the host the login was served from.
+    "TURNSTILE_EXPECTED_HOSTNAME": ""
+  },
+  // Secret names the Worker reads (used for type generation and local-dev warnings; deploys do not
+  // check them). Protected scenes need SESSION_SECRET, TURNSTILE_SECRET_KEY and one
+  // SPLAT_PASSWORD_<SLUG> each; set them with pnpm run auth:init and pnpm run password:set -- <slug>.
+  "secrets": {
+    "required": ["SPLAT_PASSWORD_PRIVATE_DEMO", "SESSION_SECRET", "TURNSTILE_SECRET_KEY"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}

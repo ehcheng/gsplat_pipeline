@@ -1,0 +1,21 @@
+{
+  "park-bench": {
+    "title": "Park Bench",
+    "description": "Two friends on a park bench under an oak tree.",
+    "date": "2026-09-12",
+    "source": "20260912_park_bench_wide",
+    "passwordBinding": null,
+    "unlisted": false,
+    "location": { "name": "Golden Gate Park", "locality": "San Francisco, CA", "lat": 37.7694, "lng": -122.4862, "precision": "exact" }
+  },
+  "private-demo": {
+    "title": "Private Demo",
+    "description": "A workshop interior, shared with a password.",
+    "date": "2026-09-19",
+    "source": "20260919_workshop_linear",
+    "passwordBinding": "SPLAT_PASSWORD_PRIVATE_DEMO",
+    "unlisted": true,
+    "location": { "name": "Portland, OR", "locality": "Portland, OR", "precision": "city" },
+    "vr": { "splats": 300000 }
+  }
+}
