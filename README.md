@@ -9,6 +9,8 @@ stills / videos ─► COLMAP (structure from motion) ─► LichtFeld Studio (3
 
 It was built around a rig of GoPro HERO12 cameras (Wide or Linear lens modes) and also works with any camera whose lens is rectilinear or fisheye. [PROJECT.md](./PROJECT.md) describes the whole system, its design decisions and measured performance; this README is the step-by-step guide.
 
+**Best run with an AI coding agent** such as Claude Code or ChatGPT/Codex. The scripts automate the standard path, but most captures need some judgment along the way: picking the lens mode, reading the SfM and training metrics, retrying a stage with different settings, leveling and framing the opening view, or writing a one-off script to cull frames or mask passers-by. The pipeline was developed that way. Point the agent at this README, `PROJECT.md` and `pipeline/docs/`, and have it launch long runs as detached processes so a command timeout does not kill them.
+
 | Folder | Role | Detailed docs |
 | --- | --- | --- |
 | `pipeline/` | Reconstruct (COLMAP), train (LichtFeld Studio), optionally export and render an orbit video. Output: a full-quality `.ply`. | `pipeline/README.md`, `pipeline/docs/` |
@@ -71,7 +73,11 @@ The example is a scene `20260912_park_bench_wide`, shot with GoPros in Wide mode
 
 Create `_workspace\20260912_park_bench_wide\` with one folder per physical camera (`cam1`, `cam2`, ...). Stills go directly in those folders; videos go in `raw\cam1.mp4` and so on (sampled at 3 fps). One folder per camera matters: COLMAP assigns one set of intrinsics per folder, so stills from different bodies must not be mixed. A single camera works too (one `cam1` folder).
 
-Aim for 300 to 800 frames in total, walking around the subject at a couple of heights. Drop obviously soft frames by hand; the pipeline does no blur rejection. Stills re-saved by editing software lose the GoPro maker notes, so give their lens explicitly.
+Aim for 300 to 800 frames in total, walking around the subject at a couple of heights. Drop obviously soft stills by hand; the pipeline does no blur rejection on stills. Stills re-saved by editing software lose the GoPro maker notes, so give their lens explicitly.
+
+With a rig of several GoPros, set every camera to the same exposure settings (shutter, ISO, white balance, lens mode) and lock them. Cameras that expose differently produce frames that disagree in brightness and color, which shows up as blotches in the splat. [SplatSync](https://echeng.com/projects/splatsync/) is a phone app that sets a whole rig to identical, locked settings from one QR code (GoPro Labs firmware); it is not distributed yet.
+
+No GoPro? A single handheld video from a phone works well. Put it in `raw\cam1.mp4` and run with `-Lens pinhole -SharpestOf 5`, which keeps the sharpest frame of every five instead of sampling at a fixed rate. See [pipeline/docs/PHONE_VIDEO.md](./pipeline/docs/PHONE_VIDEO.md) for shooting tips and for masking people who walk through the shot.
 
 ### 2. Know the lens mode
 
@@ -85,7 +91,7 @@ The easiest way to declare it is a token in the folder name (`_wide`, `-linear`,
 .\pipeline\reconstruct.cmd .\_workspace\20260912_park_bench_wide
 ```
 
-`reconstruct.cmd` resolves the lens, runs extract, sfm and train through `run.ps1`, and prints a status line every 15 s with the current sub-stage, elapsed time, estimated time left and estimated completion. Lens resolution order: `-Lens`, a token in the folder name, `capture.json`, then a provisional GoPro MakerNote fingerprint (with a warning). `-DryRun` shows the plan without running anything; `-Force` redoes completed stages; `-Iterations`, `-MaxCap`, `-Strategy` and `-Stages extract,sfm` pass through.
+`reconstruct.cmd` resolves the lens, runs extract, sfm and train through `run.ps1`, and prints a status line every 15 s with the current sub-stage, elapsed time, estimated time left and estimated completion. Lens resolution order: `-Lens`, a token in the folder name, `capture.json`, then a provisional GoPro MakerNote fingerprint (with a warning). `-DryRun` shows the plan without running anything; `-Force` redoes completed stages; `-Iterations`, `-MaxCap`, `-Strategy`, `-Fps`, `-SharpestOf` and `-Stages extract,sfm` pass through.
 
 On an RTX 6000 Ada, a 400-image Wide set takes about 1.5 hours (30 minutes of SfM, an hour of training). Run it from its own window, or detached with `Start-Process`, rather than from a shell with a command timeout. Afterwards check:
 

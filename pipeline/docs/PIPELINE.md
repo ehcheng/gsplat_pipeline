@@ -57,7 +57,10 @@ one intrinsics set per folder, which is right for three bodies and wrong if they
 ## 2. Extract stage
 
 Stills are hard-linked into `images/<cam>/` (copied if the link fails). Videos are sampled
-with ffmpeg at `-Fps` (default 3) into JPEG quality 2. Static subjects do not need temporal
+with ffmpeg at `-Fps` (default 3) into JPEG quality 2. With `-SharpestOf N`, `select-frames.ps1`
+instead keeps the sharpest frame of every N decoded frames (tiled Laplacian variance) and
+records scores and picks in `extract.<cam>.selection.json`; use it for handheld video (see
+PHONE_VIDEO.md). Static subjects do not need temporal
 sync between cameras. The stage fails if fewer than two camera folders or fewer than 20
 images result.
 
@@ -65,8 +68,8 @@ Targets: 300 to 800 frames for a single-object orbit. More frames raise COLMAP t
 superlinearly and add little past that range. The 545-image Linear reference set below used
 three cameras (182, 182, 181 stills).
 
-Blur rejection is not implemented. If footage is soft, drop the bottom 20 percent of frames
-per camera by Laplacian variance before staging.
+Blur rejection for stills is not implemented. If stills are soft, drop the bottom 20 percent
+per camera by Laplacian variance before staging. For video, use `-SharpestOf`.
 
 ## 3. SfM stage (COLMAP)
 
@@ -196,7 +199,7 @@ percent, and no black frame at the start, middle, or end. Results go to
 ```text
 run.ps1 -Scene <name>
         [-Lens linear|linear-hl|narrow|pinhole|wide|fisheye | -CameraModel OPENCV|OPENCV_FISHEYE]
-        [-Stage extract|sfm|train|export|orbit|all] [-Force] [-Fps 3]
+        [-Stage extract|sfm|train|export|orbit|all] [-Force] [-Fps 3 | -SharpestOf N]
         [-Iterations 30000] [-MaxCap 1500000] [-Strategy mcmc|mrnf|igs+]
         [-MaskMode none|ignore|segment|segment_and_ignore]
         [-OrbitKeyframes 24] [-OrbitDuration 10] [-OrbitFps 30] [-OrbitWidth 3840] [-OrbitHeight 2160]

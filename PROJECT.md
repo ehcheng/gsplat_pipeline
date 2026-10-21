@@ -142,7 +142,7 @@ cmake --install build --prefix pipeline/tools/lichtfeld
 
 ### 6.2 Extract
 
-Stills are hard-linked (copied if linking fails) into `images/<cam>/`; videos are sampled with ffmpeg at 3 fps into quality-2 JPEGs. Fails below 20 images. A marker file `extract.complete.json` records the result, outside `images/` so COLMAP never reads it.
+Stills are hard-linked (copied if linking fails) into `images/<cam>/`; videos are sampled with ffmpeg at 3 fps into quality-2 JPEGs, or, with `-SharpestOf N` (handheld phone video, see `pipeline/docs/PHONE_VIDEO.md`), `select-frames.ps1` keeps the sharpest frame of every N. Fails below 20 images. A marker file `extract.complete.json` records the result, outside `images/` so COLMAP never reads it.
 
 ### 6.3 Structure from motion (COLMAP CUDA)
 
