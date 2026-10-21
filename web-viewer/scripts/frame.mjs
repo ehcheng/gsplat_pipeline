@@ -284,7 +284,7 @@ if (opts.azimuth === undefined) {
   if (rolledFrames.length) console.log(`Leveling ignored ${rolledFrames.length} frames rolled more than ${maxRollDeg} deg: ${rolledFrames.join(' ')}`);
   console.log(`Rotate (engine Euler deg): ${rotate.join(', ')}  |  subject center ${round(target).join(', ')}  |  capture radius ${camRadius.toFixed(2)}`);
   console.log(`Writing leveled preview (${splatCount} splats, SH bands above 1 dropped)...`);
-  run([ply, '-r', rotate.join(','), '-H', '1', preview], 'preview'); // -d (decimate) crashes on 1.5M-splat inputs in v3.4.0
+  run([ply, '-r', rotate.join(','), '-H', '1', preview], 'preview');
   const n = opts.views; const tiles = [];
   frame.candidates = [];
   for (let i = 0; i < n; i++) {

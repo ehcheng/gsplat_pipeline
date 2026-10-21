@@ -74,8 +74,8 @@ let ply;
 if (opts.ply) {
   ply = resolve(opts.ply);
 } else if (sourceSplats > 0) {
-  // Cached decimated source. Adaptive keeps subject detail; even target and CPU decimation
-  // avoid the splat-transform 3.4.0 GPU crashes (see scripts/build-viewer.mjs).
+  // Cached decimated source. Adaptive keeps subject detail; the target is kept even (see
+  // scripts/build-viewer.mjs on the splat-transform 3.4.0 GPU crashes).
   ply = join(frameDir, 'wiggle_source.ply');
   const wanted = sourceSplats - (sourceSplats % 2);
   const stamp = join(frameDir, 'wiggle_source.json');
@@ -83,7 +83,7 @@ if (opts.ply) {
   if (!fresh) {
     console.log(`Decimating ${publishPly} to ${wanted} splats for the wiggle source...`);
     const cli = join(project, 'node_modules', '@playcanvas', 'splat-transform', 'bin', 'cli.mjs');
-    const r = spawnSync(process.execPath, [cli, '--no-tty', '-q', '--gpu', 'cpu', '--overwrite', publishPly, '--decimate-adaptive', String(wanted), ply], { stdio: 'inherit' });
+    const r = spawnSync(process.execPath, [cli, '--no-tty', '-q', '--gpu', process.env.SPLAT_GPU ?? '0', '--overwrite', publishPly, '--decimate-adaptive', String(wanted), ply], { stdio: 'inherit' });
     if (r.status !== 0) throw new Error(`splat-transform decimation failed (${r.status})`);
     writeFileSync(stamp, `${JSON.stringify({ splats: wanted, from: publishPly, generatedAt: new Date().toISOString() })}\n`);
   }

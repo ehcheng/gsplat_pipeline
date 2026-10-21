@@ -16,8 +16,8 @@ the tools listed below unless the text says otherwise. Companion documents:
 | GPU | NVIDIA GPU that LichtFeld Studio supports; more VRAM allows a higher splat cap (RTX 6000 Ada, 48 GB) |
 | CUDA driver | Recent NVIDIA driver (CUDA driver API 13.2) |
 | PowerShell | 7.x, on PATH or portable at `pipeline/tools/pwsh/pwsh.exe` |
-| COLMAP | CUDA build, 3.x or 4.x, on PATH, `COLMAP_PATH`, or under `pipeline/tools/colmap*/` (4.2.0 CUDA release) |
-| LichtFeld Studio | v0.4+ for training; v0.5+ for the MCP export and orbit stages. On PATH, `LICHTFELD_PATH`, or `pipeline/tools/lichtfeld/` (v0.5.3 built from source) |
+| COLMAP | CUDA build, 3.x or 4.x, on PATH, `COLMAP_PATH`, or under `pipeline/tools/colmap*/` (4.2.1 CUDA release) |
+| LichtFeld Studio | v0.4+ for training; v0.5+ for the MCP export and orbit stages. On PATH, `LICHTFELD_PATH`, or `pipeline/tools/lichtfeld/` (v0.5.4.1 built from source) |
 | ffmpeg / ffprobe | on PATH or passed via `-FfmpegPath` / `-FfprobePath` |
 | Scene root | `<repo>\_workspace\<scene>` (override with `-Root`) |
 
@@ -41,7 +41,8 @@ and refuses to use flags that are absent from it.
   colmap/sfm.metrics.json
   colmap/undistorted/          pinhole copy, OPENCV (Linear) sets only
   lfs/flags.txt                LichtFeld --help of the binary used
-  lfs/checkpoints/             *.resume
+  lfs/checkpoints/             *.resume (v0.5.3)
+  lfs/project.licht            training project (v0.5.4 and later)
   lfs/training.metrics.json
   lfs/splat_<iter>.ply         written by LichtFeld at the end of training
   lfs/<scene>.ply lfs/<scene>.spz   MCP exports
@@ -124,12 +125,15 @@ Two paths, chosen by the camera model:
   The script fails if the binary does not expose `--gut`. LichtFeld itself refuses distorted
   cameras unless `--gut` or `--undistort` is passed.
 
-Command shape (flags verified in v0.4.2 and v0.5.3):
+Command shape (flags verified in v0.4.2, v0.5.3 and v0.5.4.1):
 
 ```powershell
 LichtFeld-Studio.exe --headless --train -d <dataset> -o <scene>\lfs `
-  --strategy mcmc --max-cap 1500000 --iter 30000 [--gut]
+  --strategy mcmc --max-cap 1500000 --iter 30000 [--gut] [--mask-mode ignore] [--export ply]
 ```
+
+`--export ply` is added when the build lists it (v0.5.4 and later save only `project.licht`
+otherwise); training fails if `lfs/splat_<iter>.ply` is missing afterwards.
 
 The script polls `nvidia-smi` for the process's peak VRAM while training runs, appends
 stdout and stderr to `log.txt`, requires a `.resume` or `.licht` checkpoint, and parses the

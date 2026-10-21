@@ -199,7 +199,8 @@ $train = [ordered]@{
     gut                     = $(if ($trainMetrics) { P $trainMetrics 'gut' } else { $null })
     maxCap                  = $maxCap
     iterations              = $iterations
-    datasetImages           = RxNum $tl 'Read \d+ cameras and (\d+) images'
+    # v0.5.3 logs "Read N cameras and M images"; v0.5.4 "Training with M images"
+    datasetImages           = $(if ($tl -match 'Read \d+ cameras and (\d+) images') { RxNum $tl 'Read \d+ cameras and (\d+) images' } else { RxNum $tl 'Training with (\d+) images' })
     wallTimeSeconds         = $(if ($trainMetrics) { P $trainMetrics 'wallTimeSeconds' } else { Cmd-Seconds 'train' })
     trainingLoopSeconds     = $trainCompletedSeconds
     startupAndShutdownSeconds = $(if ($trainMetrics -and $trainCompletedSeconds) { D ([double](P $trainMetrics 'wallTimeSeconds') - $trainCompletedSeconds) 1 } else { $null })
@@ -268,8 +269,8 @@ foreach ($n in @('ffmpeg', 'feature_extractor', 'sequential_matcher', 'exhaustiv
 }
 $sfmSeconds = $(if ($stages.Contains('sfm')) { $stages['sfm'].seconds } else { $null })
 $trainStage = $(if ($stages.Contains('train')) { $stages['train'].seconds } else { $null })
-$starts = @($segments.Values | ForEach-Object { $_.startTime } | Where-Object { $_ }) | Sort-Object
-$ends = @($segments.Values | ForEach-Object { $_.endTime } | Where-Object { $_ }) | Sort-Object
+$starts = @($segments.Values | ForEach-Object { $_.startTime } | Where-Object { $_ } | Sort-Object)
+$ends = @($segments.Values | ForEach-Object { $_.endTime } | Where-Object { $_ } | Sort-Object)
 $runStarted = $(if ($starts.Count) { $starts[0] } else { $null })
 $runEnded = $(if ($ends.Count) { $ends[-1] } else { $null })
 $span = $(if ($runStarted -and $runEnded) { D ($runEnded - $runStarted).TotalSeconds 1 } else { $null })
