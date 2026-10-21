@@ -42,6 +42,7 @@ pwsh -File .\pipeline\stats.ps1 .\_workspace\20260920_lobby_wide
 
 - `docs/PIPELINE.md`: stage-by-stage reference (layout, COLMAP and LichtFeld command shapes, MCP export and orbit contract, acceptance checks, open items).
 - `docs/LENS_MODES.md`: GoPro lens mode to camera model, fisheye support in LichtFeld, and how to signal the lens.
+- `docs/PHONE_VIDEO.md`: a single handheld phone video: shooting, sharpest-frame selection (`-SharpestOf`, `select-frames.ps1`), masking passers-by and fingers.
 - `tools/INSTALLS.md`: installing COLMAP, LichtFeld Studio (binary or source build), PowerShell, Node.js and ffmpeg.
 - `tests/smoke.ps1`: contract, tool-discovery and lens-resolution tests without a GPU; run with `pwsh -File .\pipeline\tests\smoke.ps1`.
 

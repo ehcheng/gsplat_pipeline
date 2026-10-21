@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)] [string] $Scene,
     [ValidateRange(0.1, 120)] [double] $Fps = 3,
+    [ValidateRange(0, 600)] [int] $SharpestOf = 0,
     [ValidateSet('OPENCV', 'OPENCV_FISHEYE')] [string] $CameraModel,
     [ValidateSet('linear', 'linear-hl', 'narrow', 'pinhole', 'wide', 'fisheye', 'superview', 'hyperview')] [string] $Lens,
     [ValidateSet('extract', 'sfm', 'train', 'export', 'orbit', 'all')] [string] $Stage = 'all',
@@ -278,15 +279,24 @@ function Invoke-Extract {
             $cameraName = [IO.Path]::GetFileNameWithoutExtension($video.Name)
             $destination = Join-Path $script:ImagesDir $cameraName
             New-Item -ItemType Directory -Path $destination -Force | Out-Null
-            $pattern = Join-Path $destination ($cameraName + '_%05d.jpg')
-            Invoke-Logged $ffmpeg @('-hide_banner','-nostdin','-i',$video.FullName,'-vf',"fps=$Fps",'-q:v','2',$pattern)
+            if ($SharpestOf -gt 0) {
+                # Handheld video: the sharpest frame of every N instead of a fixed-rate sample.
+                $report = Join-Path $script:ScenePath "extract.$cameraName.selection.json"
+                $ffprobe = Resolve-Executable $FfprobePath 'ffprobe'
+                Write-Log "COMMAND select-frames.ps1 -Video $($video.FullName) -OutDir $destination -Window $SharpestOf"
+                & (Join-Path $PSScriptRoot 'select-frames.ps1') -Video $video.FullName -OutDir $destination -Prefix $cameraName -Window $SharpestOf -ReportPath $report -FfmpegPath $ffmpeg -FfprobePath $ffprobe | Out-Null
+            } else {
+                $pattern = Join-Path $destination ($cameraName + '_%05d.jpg')
+                Invoke-Logged $ffmpeg @('-hide_banner','-nostdin','-i',$video.FullName,'-vf',"fps=$Fps",'-q:v','2',$pattern)
+            }
             $counts[$cameraName] = @(Get-ChildItem -LiteralPath $destination -File).Count
         }
     }
     if ($counts.Count -lt 1) { throw "Expected at least one physical camera folder; found none." }
     $total = ($counts.Values | Measure-Object -Sum).Sum
     if ($total -lt 20) { throw "Only $total images were staged; reconstruction input is too small." }
-    Write-Json $marker ([ordered]@{ completedAt=(Get-Date).ToString('o'); source=$sourceRoot; cameras=$counts; total=$total })
+    $sampling = if ($cameras.Count -gt 0) { 'stills' } elseif ($SharpestOf -gt 0) { "sharpest-of-$SharpestOf" } else { "fps=$Fps" }
+    Write-Json $marker ([ordered]@{ completedAt=(Get-Date).ToString('o'); source=$sourceRoot; sampling=$sampling; cameras=$counts; total=$total })
     Ensure-ColmapImagesLink
     Write-Log "DONE extract: $total images across $($counts.Count) cameras."
 }

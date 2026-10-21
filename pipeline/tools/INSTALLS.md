@@ -57,3 +57,21 @@ $env:PATH = "$PWD\pipeline\tools\node;" + $env:PATH
 ```
 
 Then `corepack enable` (or `npm install -g pnpm`) and `pnpm install` in `web-viewer/`.
+
+## Keeping tools current
+
+Check for new versions about once a month:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\pipeline\tools\installers\check-updates.ps1
+```
+
+It prints installed and latest versions of LichtFeld Studio (newest tag), COLMAP, PowerShell 7, Node.js (same major line), ffmpeg, the pinned `web-viewer` packages and the optional `pyseg` venv, and marks each newer one `UPDATE`. It changes nothing.
+
+Treat each upgrade as an evaluation, not just an install:
+
+1. **Baseline.** Pick a finished reference scene that exercises the stage being upgraded (a large set for COLMAP, a fisheye set for LichtFeld `--gut`) and note its current numbers from `pipeline\stats.ps1 -Table`.
+2. **Install next to the old version** where you can (a new `tools\colmap-<version>-cuda` folder; for LichtFeld, keep the old `tools\lichtfeld` until the new build passes) and point the pipeline at it with `COLMAP_PATH` / `LICHTFELD_PATH`.
+3. **Read the upstream changelog** for new options: faster matchers or mappers, GPU paths for stages that run on the CPU today (or the reverse, where the CPU path is faster on this hardware), new training strategies, export formats or MCP operators.
+4. **Re-run the reference scene** and compare per-stage wall time, GPU and CPU use, splat count, PSNR/SSIM and the viewer result with the baseline.
+5. **Keep or roll back.** Record the version, recipe changes and before/after numbers in this file, then remove the old folder.

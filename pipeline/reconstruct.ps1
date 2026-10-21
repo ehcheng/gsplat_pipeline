@@ -40,6 +40,7 @@ param(
     [ValidateRange(10000, 10000000)] [int] $MaxCap = 1500000,
     [ValidateSet('mcmc', 'mrnf', 'igs+')] [string] $Strategy = 'mcmc',
     [ValidateRange(0.1, 120)] [double] $Fps = 3,
+    [ValidateRange(0, 600)] [int] $SharpestOf = 0,
     [string] $LichtFeldPath,
     [ValidateRange(1, 300)] [int] $ReportSeconds = 15
 )
@@ -217,7 +218,8 @@ function Count-Images {
     if ($n -eq 0) {
         $raw = Join-Path $script:ScenePath 'raw'
         $videos = @(Get-ChildItem -LiteralPath $(if (Test-Path $raw) { $raw } else { $script:ScenePath }) -File -Include '*.mp4', '*.mov' -ErrorAction SilentlyContinue)
-        if ($videos.Count) { $n = [int]($videos.Count * 60 * $Fps) }   # rough: one minute per clip
+        $perSecond = if ($SharpestOf -gt 0) { 30 / $SharpestOf } else { $Fps }   # rough: 30 fps video
+        if ($videos.Count) { $n = [int]($videos.Count * 60 * $perSecond) }   # rough: one minute per clip
     }
     return [math]::Max($n, 1)
 }
@@ -273,7 +275,7 @@ Write-Host ''
 if ($DryRun) {
     Write-Host 'Dry run. Commands that would be executed:' -ForegroundColor Yellow
     foreach ($stage in $Stages) {
-        $line = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', $Iterations, '-MaxCap', $MaxCap, '-Strategy', $Strategy, '-Fps', $Fps)
+        $line = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', $Iterations, '-MaxCap', $MaxCap, '-Strategy', $Strategy, '-Fps', $Fps, '-SharpestOf', $SharpestOf)
         if ($Force) { $line += '-Force' }
         Write-Host ("  {0} {1}" -f $script:Pwsh, ($line -join ' '))
     }
@@ -323,7 +325,7 @@ try {
         $out = Join-Path $script:ScenePath "reconstruct.$stage.out"
         $err = Join-Path $script:ScenePath "reconstruct.$stage.err"
         Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue
-        $args = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', "$Iterations", '-MaxCap', "$MaxCap", '-Strategy', $Strategy, '-Fps', "$Fps")
+        $args = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', "$Iterations", '-MaxCap', "$MaxCap", '-Strategy', $Strategy, '-Fps', "$Fps", '-SharpestOf', "$SharpestOf")
         if ($Force) { $args += '-Force' }
         Write-Status "STAGE $stage starting" 'Yellow'
         $child = Start-Process -FilePath $script:Pwsh -ArgumentList $args -WorkingDirectory $script:Root -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
