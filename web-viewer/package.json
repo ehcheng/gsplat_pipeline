@@ -1,0 +1,28 @@
+{
+  "name": "gsplat-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-viewer.mjs",
+    "frame": "node scripts/frame.mjs",
+    "wrangler": "node scripts/wrangler.mjs",
+    "whoami": "node scripts/wrangler.mjs whoami",
+    "preview": "node scripts/wrangler.mjs dev",
+    "check:deploy": "node scripts/wrangler.mjs deploy --dry-run",
+    "deploy": "node scripts/wrangler.mjs deploy",
+    "auth:init": "node scripts/init-auth.mjs",
+    "password:set": "node scripts/set-password.mjs",
+    "types": "node scripts/wrangler.mjs types"
+  },
+  "dependencies": {
+    "@playcanvas/splat-transform": "3.4.0",
+    "@playcanvas/supersplat-viewer": "1.31.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260908.1",
+    "@types/node": "^26.5.0",
+    "wrangler": "4.130.0"
+  }
+}
