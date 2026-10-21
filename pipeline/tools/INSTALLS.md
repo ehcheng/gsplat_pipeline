@@ -89,7 +89,7 @@ Treat each upgrade as an evaluation, not just an install:
 | wrangler | 4.130.0 → 4.151.3 | Deploy dry run clean |
 | PowerShell | 7.6.6 → 7.6.7 | Smoke tests pass |
 | Node.js | 24.21.0 → 24.22.1 | Web-viewer scripts and pnpm install run |
-| ffmpeg | 8.1 → 9.0.2 | `select-frames.ps1` picks the same 525 frames; Chocolatey upgrade needs an elevated shell |
+| ffmpeg | 8.1 → 9.0.2 | `select-frames.ps1` picks the same 525 frames; upgraded with `choco upgrade ffmpeg -y` from an elevated shell |
 | pyseg venv | torch 2.11.0+cu128 → 2.14.1+cu130, ultralytics 8.4.178 → 8.4.183 | Person masks match (mean IoU 0.9994 on 40 frames), 26% faster; torch 2.14 has no cu128 wheels |
 
 Previous versions are kept in `pipeline/tools/_old/` until the new ones have run a real scene.

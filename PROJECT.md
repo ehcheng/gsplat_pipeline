@@ -67,7 +67,7 @@ The repository holds code and docs only. Everything specific to one deployment l
 | LichtFeld Studio | v0.5.4.1 (`de2a94d5`), GPL-3.0, built from source (section 4) | 3D Gaussian-splat training (headless), MCP automation server, viewer |
 | PowerShell | 7.6 | Runs the pipeline scripts |
 | Node.js | 24.22 | Web-viewer scripts, Wrangler |
-| ffmpeg / ffprobe | 8.1 | Video frame sampling, contact sheets, JPEG/WebP encoding, video checks |
+| ffmpeg / ffprobe | 9.0 | Video frame sampling, contact sheets, JPEG/WebP encoding, video checks |
 | NVIDIA `nvidia-smi` | with driver | GPU and VRAM telemetry |
 
 ### 3.2 Web libraries (pinned in `web-viewer/package.json`, pnpm lockfile)
