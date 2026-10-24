@@ -37,7 +37,8 @@ param(
     [switch] $Force,
     [switch] $DryRun,
     [ValidateRange(1, 1000000)] [int] $Iterations = 30000,
-    [ValidateRange(10000, 10000000)] [int] $MaxCap = 1500000,
+    [ValidateRange(10000, 10000000)] [int] $MaxCap = 5000000,
+    [ValidateRange(0, 32768)] [int] $MaxImageSize = 3840,
     [ValidateSet('mcmc', 'mrnf', 'igs+')] [string] $Strategy = 'mcmc',
     [ValidateRange(0.1, 120)] [double] $Fps = 3,
     [ValidateRange(0, 600)] [int] $SharpestOf = 0,
@@ -275,7 +276,7 @@ Write-Host ''
 if ($DryRun) {
     Write-Host 'Dry run. Commands that would be executed:' -ForegroundColor Yellow
     foreach ($stage in $Stages) {
-        $line = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', $Iterations, '-MaxCap', $MaxCap, '-Strategy', $Strategy, '-Fps', $Fps, '-SharpestOf', $SharpestOf)
+        $line = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', $Iterations, '-MaxCap', $MaxCap, '-MaxImageSize', $MaxImageSize, '-Strategy', $Strategy, '-Fps', $Fps, '-SharpestOf', $SharpestOf)
         if ($Force) { $line += '-Force' }
         Write-Host ("  {0} {1}" -f $script:Pwsh, ($line -join ' '))
     }
@@ -325,7 +326,7 @@ try {
         $out = Join-Path $script:ScenePath "reconstruct.$stage.out"
         $err = Join-Path $script:ScenePath "reconstruct.$stage.err"
         Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue
-        $args = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', "$Iterations", '-MaxCap', "$MaxCap", '-Strategy', $Strategy, '-Fps', "$Fps", '-SharpestOf', "$SharpestOf")
+        $args = @('-NoProfile', '-File', $script:RunScript, '-Scene', $script:SceneName, '-Root', $script:Root, '-Lens', $resolved.Lens, '-Stage', $stage, '-LichtFeldPath', $LichtFeldPath, '-Iterations', "$Iterations", '-MaxCap', "$MaxCap", '-MaxImageSize', "$MaxImageSize", '-Strategy', $Strategy, '-Fps', "$Fps", '-SharpestOf', "$SharpestOf")
         if ($Force) { $args += '-Force' }
         Write-Status "STAGE $stage starting" 'Yellow'
         $child = Start-Process -FilePath $script:Pwsh -ArgumentList $args -WorkingDirectory $script:Root -PassThru -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err

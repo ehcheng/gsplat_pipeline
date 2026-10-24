@@ -20,7 +20,7 @@ It was built around a rig of GoPro HERO12 cameras (Wide or Linear lens modes) an
 ## Requirements
 
 - **Windows 10 or 11** (64-bit) with **PowerShell 7**. The reconstruction scripts are Windows-only; the web-viewer scripts are plain Node.js.
-- **An NVIDIA GPU** supported by LichtFeld Studio, with a current driver. The defaults (1.5 M splat cap, 30k iterations) were tuned on a 48 GB card; lower `-MaxCap` on smaller cards.
+- **An NVIDIA GPU** supported by LichtFeld Studio, with a current driver. The defaults (5 M splat cap, 30k iterations, photos scaled to 3840 px wide) were tuned on a 48 GB card; lower `-MaxCap` (1.5 M was the default until October 2026) on smaller cards.
 - **[LichtFeld Studio](https://github.com/MrNeRF/LichtFeld-Studio)**, the Gaussian-splat trainer. It is not bundled; install a Windows binary or build it from source with the scripts in `pipeline/tools/installers/` (see [pipeline/tools/INSTALLS.md](./pipeline/tools/INSTALLS.md)). v0.4 or later trains; the optional MCP-driven export and orbit stages need v0.5 or later.
 - **COLMAP** with CUDA (the official Windows CUDA release works).
 - **ffmpeg** and **ffprobe** on PATH.
@@ -91,7 +91,7 @@ The easiest way to declare it is a token in the folder name (`_wide`, `-linear`,
 .\pipeline\reconstruct.cmd .\_workspace\20260912_park_bench_wide
 ```
 
-`reconstruct.cmd` resolves the lens, runs extract, sfm and train through `run.ps1`, and prints a status line every 15 s with the current sub-stage, elapsed time, estimated time left and estimated completion. Lens resolution order: `-Lens`, a token in the folder name, `capture.json`, then a provisional GoPro MakerNote fingerprint (with a warning). `-DryRun` shows the plan without running anything; `-Force` redoes completed stages; `-Iterations`, `-MaxCap`, `-Strategy`, `-Fps`, `-SharpestOf` and `-Stages extract,sfm` pass through.
+`reconstruct.cmd` resolves the lens, runs extract, sfm and train through `run.ps1`, and prints a status line every 15 s with the current sub-stage, elapsed time, estimated time left and estimated completion. Lens resolution order: `-Lens`, a token in the folder name, `capture.json`, then a provisional GoPro MakerNote fingerprint (with a warning). `-DryRun` shows the plan without running anything; `-Force` redoes completed stages; `-Iterations`, `-MaxCap`, `-MaxImageSize` (0 = train at full resolution), `-Strategy`, `-Fps`, `-SharpestOf` and `-Stages extract,sfm` pass through.
 
 On an RTX 6000 Ada, a 400-image Wide set takes about 1.5 hours (30 minutes of SfM, an hour of training). Run it from its own window, or detached with `Start-Process`, rather than from a shell with a command timeout. Afterwards check:
 
@@ -119,7 +119,7 @@ Look at the sheet, then run pass 2 with the azimuth you want (optionally `--elev
 node scripts\build-viewer.mjs ..\_workspace\20260912_park_bench_wide\lfs\splat_30000.ply park-bench
 ```
 
-Slugs are lowercase letters, digits and single hyphens. The builder uses `frame\publish.ply` and the opening camera from step 4, converts to SOG (a 355 MiB, 1.5 M splat PLY becomes about 20 MiB), writes the patched viewer page, the link-preview image and a `/vr` variant for headsets and phone AR. See `web-viewer/PUBLISHING.md` for options.
+Slugs are lowercase letters, digits and single hyphens. The builder uses `frame\publish.ply` and the opening camera from step 4, converts to SOG (a 1.5 M splat PLY becomes about 20 MiB; larger masters are decimated to 1.5 M for this file, and `--lod` adds a streamed copy of the full master), writes the patched viewer page, the link-preview image and a `/vr` variant for headsets and phone AR. See `web-viewer/PUBLISHING.md` for options.
 
 ### 6. Register, deploy, verify
 
@@ -141,7 +141,7 @@ Open `https://<your domain>/3d/park-bench/` in a private window. For password-pr
 - `pipeline/tests/smoke.ps1` checks the `run.ps1` contract, tool discovery and lens resolution without a GPU.
 - `@playcanvas/splat-transform` 3.4.0 crashed silently (exit code `0xC0000409`) writing SOG on the GPU from an odd number of splats, and in GPU decimation. 3.10.2 fixes both, so `build-viewer.mjs` and `wiggle.mjs` decimate on the GPU again (about 9 s for 1.5 M splats, against 40 to 70 s on the CPU); targets are still kept even.
 - Large single-camera sets (more than about 1,000 images) map much faster with COLMAP's `global_mapper` than with the incremental mapper; see `pipeline/docs/PIPELINE.md`.
-- Cloudflare limits each static file to 25 MiB. A larger `scene.sog` needs a lower `-MaxCap` or R2 storage.
+- Cloudflare limits each static file to 25 MiB, about 1.5 M splats as one `scene.sog`. The builder decimates larger masters to fit (`--web-splats`); `--lod` serves the full master as a streamed SOG in chunks of about 2 MiB.
 
 ## License
 

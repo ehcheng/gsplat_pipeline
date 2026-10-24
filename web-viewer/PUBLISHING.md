@@ -85,6 +85,8 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 
 | Option | Default | Meaning |
 | --- | --- | --- |
+| `--web-splats N` | 1500000 | Splat count for the main `scene.sog`; larger masters are decimated adaptively to it (0 keeps every splat) |
+| `--lod` | | Also write `lod/`, a streamed SOG of the full master with levels at 100, 50, 25 and 10%, and point the page at it. Adds about 6 min for 5 M splats |
 | `--no-vr` | | Skip the `vr/` build |
 | `--vr-only` | | Rebuild only `vr/` under an existing main build |
 | `--vr-splats N` | 350000 | Target splat count (forced even) |
@@ -97,9 +99,9 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 | `--vr-frame-rate hz` | 72 | Session frame rate requested when the headset offers it (0 = browser default) |
 | `--vr-sort-epsilon e` | 0.01 | Camera movement below which the WebGL sorter does not re-sort |
 
-The same keys can be set per scene in `site/scenes.json` under `"vr"`; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL.
+The same keys can be set per scene in `site/scenes.json` under `"vr"`, and `"web": { "splats": N, "lod": true }` for the main build; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL.
 
-Check `build.json` after every build. Cloudflare Workers Static Assets limit each file to **25 MiB**; a 1.5 M splat scene comes out at about 20 MiB. If `scene.sog` is larger, retrain with a lower `-MaxCap`, or put the SOG in private R2 and extend the Worker to stream it through the same authenticated route. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#static-assets).
+Check `build.json` after every build. Cloudflare Workers Static Assets limit each file to **25 MiB**; a 1.5 M splat scene comes out at about 20 MiB, which is why `--web-splats` defaults to 1.5 M. `lod/` files are about 2 MiB each. The builder warns when any file is over the limit. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#static-assets).
 
 Building replaces only `dist/3d/<slug>`; other scenes stay.
 

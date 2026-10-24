@@ -1,9 +1,18 @@
 // Builds dist/3d/<slug>/ (the full scene, no AR/VR) and dist/3d/<slug>/vr/ (a reduced scene for
 // headsets and phone AR, with the viewer's AR/VR buttons) from one PLY.
 //
-//   node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only]
+//   node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod]
+//                                 [--web-splats N]
 //                                 [--vr-splats N] [--vr-sh 0|1|2|3] [--vr-min-opacity a]
 //                                 [--vr-framebuffer-scale s]
+//
+// The main build's scene.sog is one file, and Cloudflare serves files of at most 25 MiB, which
+// is about 1.5 M splats. Masters trained above that (the 5 M default since 2026-10-23) are
+// decimated adaptively to --web-splats (default 1500000; 0 keeps every splat) for scene.sog.
+// --lod also writes lod/: a streamed SOG of the full master plus adaptive decimations to 50%,
+// 25% and 10%, in chunks of about 2 MiB, and points the page at it. The viewer then loads the
+// level each chunk needs within the quality slider's splat budget (desktop 2-16 M, mobile
+// 1-8 M). scene.sog is still written, for the catalog export and as a fallback.
 //
 // The /vr build is served at the scene URL plus /vr, behind the same password gate. Why a second
 // build instead of one scene for everything: the full 1.5 M splat scenes render fine on a
@@ -30,7 +39,7 @@
 // because the sky and far shell have to cover the view whatever the count.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,14 +58,14 @@ const flags = {};
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--no-vr' || a === '--vr-only') flags[a.slice(2)] = true;
+  if (a === '--no-vr' || a === '--vr-only' || a === '--lod') flags[a.slice(2)] = true;
   else if (a.startsWith('--')) flags[a.slice(2)] = argv[++i];
   else positional.push(a);
 }
 const [inputArg, slug = 'scene'] = positional;
 
 if (!inputArg) {
-  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
+  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod] [--web-splats N] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
   process.exit(2);
 }
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug)) {
@@ -91,6 +100,15 @@ const vrOptions = {
   ...(flags['vr-sort-epsilon'] !== undefined ? { xrSortEpsilon: Number(flags['vr-sort-epsilon']) } : {})
 };
 if (!(Number.isInteger(vrOptions.splats) && vrOptions.splats >= 10000)) throw new Error(`vr.splats must be an integer >= 10000, got ${vrOptions.splats}`);
+// Main build overrides live in the registry under "web": { "splats": N, "lod": true }.
+const webOptions = {
+  splats: 1500000,
+  lod: false,
+  ...(registered?.web ?? {}),
+  ...(flags['web-splats'] !== undefined ? { splats: Number(flags['web-splats']) } : {}),
+  ...(flags.lod ? { lod: true } : {})
+};
+if (!(Number.isInteger(webOptions.splats) && (webOptions.splats === 0 || webOptions.splats >= 10000))) throw new Error(`web.splats must be 0 or an integer >= 10000, got ${webOptions.splats}`);
 if (!['adaptive', 'uniform'].includes(vrOptions.decimate)) throw new Error(`vr.decimate must be 'adaptive' or 'uniform', got ${vrOptions.decimate}`);
 if (!(vrOptions.xrFarClip >= 1000)) throw new Error(`vr.xrFarClip must be >= 1000, got ${vrOptions.xrFarClip}`);
 if (![0, 1, 2, 3].includes(vrOptions.sh)) throw new Error(`vr.sh must be 0..3, got ${vrOptions.sh}`);
@@ -136,10 +154,10 @@ const sceneDir = frame ? dirname(dirname(frameCandidate)) : dirname(dirname(inpu
 const settings = defaultSettings('object');
 if (frame?.chosen?.camera) settings.cameras = [{ initial: frame.chosen.camera }];
 
-const viewerHtml = (baseHref, title) =>
+const viewerHtml = (baseHref, title, contentUrl = './scene.sog') =>
   renderViewerHtml({
     bootstrap: {
-      contentUrl: './scene.sog',
+      contentUrl,
       settings
     },
     baseHref,
@@ -156,25 +174,72 @@ const frameSummary = frame
   : null;
 const sourceBytes = statSync(input).size;
 const mib = (bytes) => Number((bytes / 1048576).toFixed(2));
+const CLOUDFLARE_FILE_LIMIT = 25 * 1048576;
+
+// Splat count from the PLY header.
+const plyCount = (ply) => {
+  const fd = openSync(ply, 'r');
+  const head = Buffer.alloc(65536);
+  const n = readSync(fd, head, 0, head.length, 0);
+  closeSync(fd);
+  const match = /element vertex (\d+)/u.exec(head.subarray(0, n).toString('latin1'));
+  if (!match) throw new Error(`No vertex count in the header of ${ply}`);
+  return Number(match[1]);
+};
+const even = (n) => n - (n % 2);
+// Decimated PLYs are kept next to publish.ply (or in the temp dir without a frame) so a build
+// can be checked with the CLI renderer.
+const derivedPly = (name) => join(usePublishPly ? dirname(publishPly) : tmpdir(), `${name}_${slug}.ply`);
+const filesUnder = (dir) => readdirSync(dir, { recursive: true }).map((f) => join(dir, f)).filter((f) => statSync(f).isFile());
 
 // ------------------------------------------------------------------ main build
 if (!flags['vr-only']) {
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output, { recursive: true });
   const sog = join(output, 'scene.sog');
-  transform([source, ...actions, sog], 'main SOG');
+  const splats = plyCount(source);
+  const webSplats = webOptions.splats && splats > webOptions.splats ? even(webOptions.splats) : null;
+  if (webSplats) {
+    // --decimate-adaptive has to be the last action and needs a PLY output, hence two passes.
+    const webPly = derivedPly('web');
+    transform([source, ...actions, '--decimate-adaptive', String(webSplats), webPly], 'web decimation');
+    transform([webPly, sog], 'main SOG');
+  } else {
+    transform([source, ...actions, sog], 'main SOG');
+  }
+  const sogBytes = statSync(sog).size;
+  if (sogBytes > CLOUDFLARE_FILE_LIMIT) console.warn(`scene.sog is ${mib(sogBytes)} MiB, over Cloudflare's 25 MiB file limit; lower --web-splats.`);
 
-  writeFileSync(join(output, 'index.html'), viewerHtml(`/3d/${slug}/`, slug.replaceAll('-', ' ')));
+  let lod = null;
+  if (webOptions.lod) {
+    const levels = [{ ply: source, actions, splats }];
+    for (const [i, fraction] of [0.5, 0.25, 0.1].entries()) {
+      const ply = derivedPly(`lod${i + 1}`);
+      const target = even(Math.round(splats * fraction));
+      transform([source, ...actions, '--decimate-adaptive', String(target), ply], `LOD ${i + 1} decimation`);
+      levels.push({ ply, actions: [], splats: target });
+    }
+    const lodDir = join(output, 'lod');
+    transform([...levels.flatMap((l, i) => [l.ply, ...l.actions, '-l', String(i)]), join(lodDir, 'lod-meta.json'), '--filter-nan'], 'streamed SOG');
+    const sizes = filesUnder(lodDir).map((f) => statSync(f).size);
+    const bytes = sizes.reduce((a, b) => a + b, 0);
+    const largest = Math.max(...sizes);
+    if (largest > CLOUDFLARE_FILE_LIMIT) console.warn(`lod/ has a ${mib(largest)} MiB file, over Cloudflare's 25 MiB file limit.`);
+    lod = { output: `/3d/${slug}/lod/lod-meta.json`, levels: levels.map((l) => l.splats), files: sizes.length, bytes, MiB: mib(bytes), largestFileMiB: mib(largest) };
+  }
+
+  writeFileSync(join(output, 'index.html'), viewerHtml(`/3d/${slug}/`, slug.replaceAll('-', ' '), lod ? './lod/lod-meta.json' : './scene.sog'));
   // Link-preview image from <scene>/thumbnail.jpg; see scripts/social.mjs.
   const social = writeSocial(sceneDir, output);
   // FPS-style gamepad look/move rates, no AR/VR; see scripts/viewer-patch.mjs.
   writeFileSync(join(output, 'index.js'), patchViewerBundle(pristineBundle, { xr: false }));
 
-  const sogBytes = statSync(sog).size;
   const result = {
     source: basename(input),
     sourceDirectory: basename(dirname(input)),
     output: `/3d/${slug}/scene.sog`,
+    splats,
+    sogSplats: webSplats ?? splats,
     sourceBytes,
     sogBytes,
     reductionPercent: Number((100 * (1 - sogBytes / sourceBytes)).toFixed(1)),
@@ -182,6 +247,7 @@ if (!flags['vr-only']) {
     sogMiB: mib(sogBytes),
     frame: frameSummary,
     social,
+    lod,
     vr: flags['no-vr'] ? null : `/3d/${slug}/vr/`
   };
   writeFileSync(join(output, 'build.json'), `${JSON.stringify(result, null, 2)}\n`);
@@ -196,12 +262,10 @@ if (!flags['no-vr']) {
   rmSync(vrOutput, { recursive: true, force: true });
   mkdirSync(vrOutput, { recursive: true });
   const sog = join(vrOutput, 'scene.sog');
-  // The decimated PLY is kept next to publish.ply (or in the temp dir without a frame) so a
-  // rebuild with the same settings can be checked with the CLI renderer.
-  const vrPly = join(usePublishPly ? dirname(publishPly) : tmpdir(), `vr_${slug}.ply`);
+  const vrPly = derivedPly('vr');
   const cull = vrOptions.minOpacity > 0 ? ['-V', `opacity,gt,${vrOptions.minOpacity}`] : [];
   // --decimate-adaptive has to be the last action and needs a PLY output, hence two passes.
-  const target = vrOptions.splats - (vrOptions.splats % 2);
+  const target = even(vrOptions.splats);
   transform([source, ...actions, ...cull, vrOptions.decimate === 'uniform' ? '--decimate' : '--decimate-adaptive', String(target), vrPly], 'VR decimation');
   transform([vrPly, '-H', String(vrOptions.sh), sog], 'VR SOG');
 
