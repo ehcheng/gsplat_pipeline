@@ -18,7 +18,7 @@ This document describes the whole system: platform, software and builds, every p
 flowchart LR
   A[Stills or videos<br/>_workspace/scene/cam1..N] --> B[extract<br/>hard links]
   B --> C[COLMAP CUDA<br/>SIFT, sequential/exhaustive, mapper]
-  C --> D[LichtFeld Studio<br/>MCMC 30k it, 1.5 M cap, 3DGUT]
+  C --> D[LichtFeld Studio<br/>MCMC 30k it, 5 M cap, 3DGUT]
   D --> E[frame.mjs<br/>level, opening camera,<br/>far shell, thumbnail]
   E --> F[build-viewer.mjs<br/>full: SOG + SuperSplat viewer<br/>+ gamepad patch + og.jpg<br/>/vr: cull, decimate, SOG,<br/>WebGL + AR/VR patch]
   F --> G[Cloudflare Worker<br/>your-domain/3d/*<br/>password gate, previews<br/>/3d/slug/ and /3d/slug/vr/]
@@ -159,12 +159,12 @@ Success means exactly one model. Anything else wipes `sparse/` and retries with 
 ### 6.4 Training (LichtFeld Studio, headless)
 
 ```powershell
-LichtFeld-Studio.exe --headless --train -d <dataset> -o <scene>\lfs --strategy mcmc --max-cap 1500000 --iter 30000 [--gut] [--mask-mode ignore]
+LichtFeld-Studio.exe --headless --train -d <dataset> -o <scene>\lfs --strategy mcmc --max-cap 5000000 --iter 30000 [--gut] [--mask-mode ignore]
 ```
 
 - **Linear sets:** `colmap image_undistorter --max_image_size 3840` writes a pinhole dataset; plain rasterizer.
 - **Wide sets:** train on the fisheye COLMAP model directly with `--gut` (3DGUT, 3D Gaussian Unscented Transform), which projects each Gaussian through the real lens model, so nothing is cropped or resampled.
-- MCMC densification up to a 1.5 M Gaussian cap, 30,000 iterations. Output `lfs/splat_30000.ply`: 1.5 M splats × 62 float properties (position, scale, rotation, opacity, degree-3 spherical harmonics) = 355 MiB.
+- MCMC densification up to a 5 M Gaussian cap, 30,000 iterations. Output `lfs/splat_30000.ply`: 5 M splats × 62 float properties (position, scale, rotation, opacity, degree-3 spherical harmonics) = 1.2 GiB. The cap was 1.5 M (355 MiB) until 2026-10-23; see the quality numbers in `pipeline/docs/PIPELINE.md`.
 - `-MaskMode` passes per-image masks (`<dataset>/masks/<cam>/<stem>.png`) for scenes with transient content such as passers-by.
 - The script requires a checkpoint to exist, parses the final loss, polls `nvidia-smi` for VRAM, and writes `lfs/training.metrics.json`.
 
@@ -372,7 +372,7 @@ Git holds no captures, models, renders, site configuration or per-run history (`
 - **Peak VRAM reads 0.** `nvidia-smi` does not attribute memory to the LichtFeld process.
 - **No blur rejection.** Soft frames are removed by hand.
 - **The front is chosen by hand.** The pass-1 subject center can land in tree canopy on wooded scenes, and cramped sites can put the camera behind structures.
-- **25 MiB asset limit.** A larger SOG needs a lower `-MaxCap` or R2 storage streamed through the Worker.
+- **25 MiB asset limit.** `scene.sog` holds at most about 1.5 M splats, so the builder decimates larger masters for it; the full master goes out as a streamed SOG (`--lod`) in chunks of about 2 MiB.
 - **`/3d/` is the fixed path prefix.** The Worker, builder and catalog all assume it.
 - **Wide vs Linear on the same subject is unmeasured.**
 - **`/vr` runs on WebGL with the CPU sorter**, so splat count matters there over and above overdraw. Streamed SOG with LOD was considered and rejected: it thins by chunk distance and leaves the near subject at full density, which is exactly where the headset stutters.

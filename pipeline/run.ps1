@@ -16,9 +16,11 @@ param(
     [string] $LichtFeldPath = 'LichtFeld-Studio',
     [uri] $McpEndpoint = 'http://127.0.0.1:45677/mcp',
     [ValidateRange(1, 1000000)] [int] $Iterations = 30000,
-    [ValidateRange(10000, 10000000)] [int] $MaxCap = 1500000,
+    [ValidateRange(10000, 10000000)] [int] $MaxCap = 5000000,
     [ValidateSet('mcmc', 'mrnf', 'igs+')] [string] $Strategy = 'mcmc',
     [ValidateSet('none', 'ignore', 'segment', 'segment_and_ignore')] [string] $MaskMode = 'none',
+    [ValidateRange(0, 32768)] [int] $MaxImageSize = 3840,
+    [string[]] $TrainArgs = @(),
     [ValidateRange(4, 120)] [int] $OrbitKeyframes = 24,
     [ValidateRange(1, 120)] [double] $OrbitDuration = 10,
     [ValidateRange(1, 240)] [int] $OrbitFps = 30,
@@ -402,15 +404,19 @@ function Invoke-Train {
         $trainingDataset = Join-Path $script:ColmapDir 'undistorted'
         $undistortMarker = Join-Path $trainingDataset '.undistort.complete.json'
         $undistortedModel = Join-Path $trainingDataset 'sparse'
-        if (-not (Test-Path -LiteralPath $undistortMarker) -or -not (Test-Path -LiteralPath (Join-Path $undistortedModel 'cameras.bin'))) {
+        # -MaxImageSize 0 keeps full resolution (COLMAP's -1); a marker written at another size is redone.
+        $undistortedSize = $null
+        if (Test-Path -LiteralPath $undistortMarker) { $undistortedSize = (Get-Content -LiteralPath $undistortMarker -Raw | ConvertFrom-Json).PSObject.Properties['maxImageSize']?.Value }
+        if ($undistortedSize -ne $MaxImageSize -or -not (Test-Path -LiteralPath (Join-Path $undistortedModel 'cameras.bin'))) {
             Reset-Directory $trainingDataset
             $colmap = Resolve-Executable $ColmapPath 'COLMAP'
-            Invoke-Logged $colmap @('image_undistorter','--image_path',$script:ImagesDir,'--input_path',(Get-ColmapModels)[0].FullName,'--output_path',$trainingDataset,'--output_type','COLMAP','--max_image_size','3840')
+            $colmapSize = if ($MaxImageSize -eq 0) { -1 } else { $MaxImageSize }
+            Invoke-Logged $colmap @('image_undistorter','--image_path',$script:ImagesDir,'--input_path',(Get-ColmapModels)[0].FullName,'--output_path',$trainingDataset,'--output_type','COLMAP','--max_image_size',"$colmapSize")
             $undistortedImages = @(Get-ChildItem -LiteralPath (Join-Path $trainingDataset 'images') -Recurse -File -ErrorAction SilentlyContinue).Count
             $stagedImages = @(Get-ChildItem -LiteralPath $script:ImagesDir -Recurse -File | Where-Object { $_.Name -ne '.extract.complete.json' }).Count
             if ($undistortedImages -ne $stagedImages) { throw "COLMAP undistortion wrote $undistortedImages images; expected $stagedImages (the staged image count)." }
-            Write-Json $undistortMarker ([ordered]@{ completedAt=(Get-Date).ToString('o'); images=$undistortedImages; maxImageSize=3840; sourceModel=(Get-ColmapModels)[0].FullName })
-            Write-Log "DONE undistort: $undistortedImages pinhole images at maximum dimension 3840 px."
+            Write-Json $undistortMarker ([ordered]@{ completedAt=(Get-Date).ToString('o'); images=$undistortedImages; maxImageSize=$MaxImageSize; sourceModel=(Get-ColmapModels)[0].FullName })
+            Write-Log "DONE undistort: $undistortedImages pinhole images at maximum dimension $(if ($MaxImageSize -eq 0) { 'full resolution' } else { "$MaxImageSize px" })."
         }
     }
     $lichtfeld = Resolve-Executable $LichtFeldPath 'LichtFeld Studio'
@@ -438,6 +444,9 @@ function Invoke-Train {
     # v0.5.4 saves only project.licht unless asked for a splat file; --export ply restores
     # lfs/splat_<iter>.ply, which frame.mjs and build-viewer.mjs read. v0.5.3 writes it unasked.
     if ($help.Contains('--export')) { $arguments += @('--export', 'ply') }
+    # v0.5.4 scales photos wider than --max-width (default 3840) down before training; 0 trains at full width.
+    if ($help.Contains('--max-width')) { $arguments += @('--max-width', "$MaxImageSize") }
+    $arguments += $TrainArgs
     $stdout = Join-Path $script:LfsDir 'training.stdout.log'
     $stderr = Join-Path $script:LfsDir 'training.stderr.log'
     Write-Log "COMMAND $(Quote-Command $lichtfeld $arguments)"

@@ -129,7 +129,7 @@ Command shape (flags verified in v0.4.2, v0.5.3 and v0.5.4.1):
 
 ```powershell
 LichtFeld-Studio.exe --headless --train -d <dataset> -o <scene>\lfs `
-  --strategy mcmc --max-cap 1500000 --iter 30000 [--gut] [--mask-mode ignore] [--export ply]
+  --strategy mcmc --max-cap 5000000 --iter 30000 [--gut] [--mask-mode ignore] [--export ply]
 ```
 
 `--export ply` is added when the build lists it (v0.5.4 and later save only `project.licht`
@@ -149,8 +149,13 @@ Reference numbers from the 545-image Linear set (RTX 6000 Ada, v0.4.2, MCMC, 1.5
 | Wall time | 1376 s |
 | Peak VRAM | not captured (nvidia-smi reported 0 for the process; open item) |
 
-`--max-cap 1500000` is a safe first run for a single subject on a 24 GB or larger GPU. Raise
-toward 3M if `nvidia-smi` shows headroom; lower it on smaller cards. On the reference
+The default cap is 5M (`-MaxCap 5000000`) with photos scaled to 3840 px wide (`-MaxImageSize
+3840`). Holdout scoring on two scenes (2026-10-23, one in eight photos held out, scored against
+the full-resolution photo at 1920 and 3840 px) found that the splat cap is what raises
+quality: 5M against 1.5M cut LPIPS by 15% on a 27 MP GoPro set and 8% on a 50 MP Sony set,
+for 1.6x the training time. Full-resolution training scored no better than 3840 at either cap
+and took 2 to 5 times as long, so `-MaxImageSize 0` is only worth it for scenes meant to be
+inspected closer than 4K. 1.5M was the default before and still suits smaller GPUs. On the reference
 machine, 410 Wide (27 MP fisheye) images trained through 3DGUT at 8.2 it/s against 22.1 it/s
 for the undistorted Linear set, so a Wide set takes about an hour at 30k iterations.
 
@@ -204,8 +209,8 @@ percent, and no black frame at the start, middle, or end. Results go to
 run.ps1 -Scene <name>
         [-Lens linear|linear-hl|narrow|pinhole|wide|fisheye | -CameraModel OPENCV|OPENCV_FISHEYE]
         [-Stage extract|sfm|train|export|orbit|all] [-Force] [-Fps 3 | -SharpestOf N]
-        [-Iterations 30000] [-MaxCap 1500000] [-Strategy mcmc|mrnf|igs+]
-        [-MaskMode none|ignore|segment|segment_and_ignore]
+        [-Iterations 30000] [-MaxCap 5000000] [-Strategy mcmc|mrnf|igs+]
+        [-MaskMode none|ignore|segment|segment_and_ignore] [-MaxImageSize 3840] [-TrainArgs <flags>]
         [-OrbitKeyframes 24] [-OrbitDuration 10] [-OrbitFps 30] [-OrbitWidth 3840] [-OrbitHeight 2160]
         [-OrbitCenter x,y,z] [-OrbitRadius r] [-SceneNode <name>]
         [-Root <dir>] [-InputPath <dir>] [-ColmapPath] [-LichtFeldPath] [-FfmpegPath] [-FfprobePath] [-McpEndpoint]
@@ -225,6 +230,12 @@ run.ps1 -Scene <name>
   images' pixel space (the undistorted ones for Linear/pinhole), white = train, black =
   ignored; train refuses to start if the folder is empty. The scene must supply them, for
   example from a person-segmentation model run over the staged frames.
+- `-MaxImageSize` is the largest training image dimension: COLMAP undistorts pinhole sets to
+  it, and LichtFeld v0.5.4+ gets it as `--max-width`. 0 trains at full resolution. Changing it
+  on a pinhole scene redoes the undistort step.
+- `-TrainArgs` appends raw LichtFeld flags to the training command, for experiments such as
+  holdout evaluation (`--eval --test-every 8`). Pass it as an array from PowerShell; it does
+  not survive `pwsh -File`.
 - `tests/smoke.ps1` parses the script, checks the parameter contract, unit-tests the lens
   table and the `cameras.bin` reader, and runs the lens resolution end to end against a
   throwaway scene. No GPU, no external tools.
