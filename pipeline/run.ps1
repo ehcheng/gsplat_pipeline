@@ -235,7 +235,12 @@ function Get-CameraSources([string] $SourceRoot) {
 
 function Ensure-ColmapImagesLink {
     $link = Join-Path $script:ColmapDir 'images'
-    if (Test-Path -LiteralPath $link) { return }
+    $item = Get-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+    if ($item) {
+        if (-not $item.LinkType -or ($item.Target -join '') -eq $script:ImagesDir) { return }
+        # A junction left pointing elsewhere (the scene folder was moved); Test-Path is true even when it dangles.
+        Remove-Item -LiteralPath $link -Force
+    }
     try {
         New-Item -ItemType Junction -Path $link -Target $script:ImagesDir -ErrorAction Stop | Out-Null
     } catch {
