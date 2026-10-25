@@ -2,7 +2,7 @@
 // headsets and phone AR, with the viewer's AR/VR buttons) from one PLY.
 //
 //   node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod]
-//                                 [--web-splats N]
+//                                 [--web-splats N] [--vr-lod]
 //                                 [--vr-splats N] [--vr-sh 0|1|2|3] [--vr-min-opacity a]
 //                                 [--vr-framebuffer-scale s]
 //
@@ -58,14 +58,14 @@ const flags = {};
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--no-vr' || a === '--vr-only' || a === '--lod') flags[a.slice(2)] = true;
+  if (a === '--no-vr' || a === '--vr-only' || a === '--lod' || a === '--vr-lod') flags[a.slice(2)] = true;
   else if (a.startsWith('--')) flags[a.slice(2)] = argv[++i];
   else positional.push(a);
 }
 const [inputArg, slug = 'scene'] = positional;
 
 if (!inputArg) {
-  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod] [--web-splats N] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
+  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod] [--web-splats N] [--vr-lod] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
   process.exit(2);
 }
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug)) {
@@ -97,7 +97,8 @@ const vrOptions = {
   ...(flags['vr-far-clip'] !== undefined ? { xrFarClip: Number(flags['vr-far-clip']) } : {}),
   ...(flags['vr-foveation'] !== undefined ? { xrFixedFoveation: Number(flags['vr-foveation']) } : {}),
   ...(flags['vr-frame-rate'] !== undefined ? { xrFrameRate: Number(flags['vr-frame-rate']) } : {}),
-  ...(flags['vr-sort-epsilon'] !== undefined ? { xrSortEpsilon: Number(flags['vr-sort-epsilon']) } : {})
+  ...(flags['vr-sort-epsilon'] !== undefined ? { xrSortEpsilon: Number(flags['vr-sort-epsilon']) } : {}),
+  ...(flags['vr-lod'] ? { lod: true } : {})
 };
 if (!(Number.isInteger(vrOptions.splats) && vrOptions.splats >= 10000)) throw new Error(`vr.splats must be an integer >= 10000, got ${vrOptions.splats}`);
 // Main build overrides live in the registry under "web": { "splats": N, "lod": true }.
@@ -191,6 +192,15 @@ const even = (n) => n - (n % 2);
 // can be checked with the CLI renderer.
 const derivedPly = (name) => join(usePublishPly ? dirname(publishPly) : tmpdir(), `${name}_${slug}.ply`);
 const filesUnder = (dir) => readdirSync(dir, { recursive: true }).map((f) => join(dir, f)).filter((f) => statSync(f).isFile());
+// Streamed SOG of levels (finest first; each { ply, actions?, splats }) at dir/lod-meta.json.
+const writeStreamed = (levels, dir, what) => {
+  transform([...levels.flatMap((l, i) => [l.ply, ...(l.actions ?? []), '-l', String(i)]), join(dir, 'lod-meta.json'), '--filter-nan'], what);
+  const sizes = filesUnder(dir).map((f) => statSync(f).size);
+  const bytes = sizes.reduce((a, b) => a + b, 0);
+  const largest = Math.max(...sizes);
+  if (largest > CLOUDFLARE_FILE_LIMIT) console.warn(`${dir} has a ${mib(largest)} MiB file, over Cloudflare's 25 MiB file limit.`);
+  return { levels: levels.map((l) => l.splats), files: sizes.length, bytes, MiB: mib(bytes), largestFileMiB: mib(largest) };
+};
 
 // ------------------------------------------------------------------ main build
 if (!flags['vr-only']) {
@@ -219,13 +229,7 @@ if (!flags['vr-only']) {
       transform([source, ...actions, '--decimate-adaptive', String(target), ply], `LOD ${i + 1} decimation`);
       levels.push({ ply, actions: [], splats: target });
     }
-    const lodDir = join(output, 'lod');
-    transform([...levels.flatMap((l, i) => [l.ply, ...l.actions, '-l', String(i)]), join(lodDir, 'lod-meta.json'), '--filter-nan'], 'streamed SOG');
-    const sizes = filesUnder(lodDir).map((f) => statSync(f).size);
-    const bytes = sizes.reduce((a, b) => a + b, 0);
-    const largest = Math.max(...sizes);
-    if (largest > CLOUDFLARE_FILE_LIMIT) console.warn(`lod/ has a ${mib(largest)} MiB file, over Cloudflare's 25 MiB file limit.`);
-    lod = { output: `/3d/${slug}/lod/lod-meta.json`, levels: levels.map((l) => l.splats), files: sizes.length, bytes, MiB: mib(bytes), largestFileMiB: mib(largest) };
+    lod = { output: `/3d/${slug}/lod/lod-meta.json`, ...writeStreamed(levels, join(output, 'lod'), 'streamed SOG') };
   }
 
   writeFileSync(join(output, 'index.html'), viewerHtml(`/3d/${slug}/`, slug.replaceAll('-', ' '), lod ? './lod/lod-meta.json' : './scene.sog'));
@@ -264,16 +268,36 @@ if (!flags['no-vr']) {
   const sog = join(vrOutput, 'scene.sog');
   const vrPly = derivedPly('vr');
   const cull = vrOptions.minOpacity > 0 ? ['-V', `opacity,gt,${vrOptions.minOpacity}`] : [];
+  const decimate = vrOptions.decimate === 'uniform' ? '--decimate' : '--decimate-adaptive';
   // --decimate-adaptive has to be the last action and needs a PLY output, hence two passes.
   const target = even(vrOptions.splats);
-  transform([source, ...actions, ...cull, vrOptions.decimate === 'uniform' ? '--decimate' : '--decimate-adaptive', String(target), vrPly], 'VR decimation');
+  transform([source, ...actions, ...cull, decimate, String(target), vrPly], 'VR decimation');
   transform([vrPly, '-H', String(vrOptions.sh), sog], 'VR SOG');
+
+  // --vr-lod (under test, 2026-10-24): stream the culled master with the same SH cut and
+  // decimation, levels at 100, 50, 25, 10 and 5%, so a headset's budget (the viewer's 0.5, 1,
+  // 2 M ladder, or ?budget=<millions> on the URL) is spent on the nearest detail. scene.sog
+  // stays as the fallback.
+  let lod = null;
+  if (vrOptions.lod) {
+    const base = derivedPly('vrlod0');
+    transform([source, ...actions, ...cull, '-H', String(vrOptions.sh), base], 'VR LOD base');
+    const count = plyCount(base);
+    const levels = [{ ply: base, splats: count }];
+    for (const [i, fraction] of [0.5, 0.25, 0.1, 0.05].entries()) {
+      const ply = derivedPly(`vrlod${i + 1}`);
+      const levelTarget = even(Math.round(count * fraction));
+      transform([base, decimate, String(levelTarget), ply], `VR LOD ${i + 1} decimation`);
+      levels.push({ ply, splats: levelTarget });
+    }
+    lod = { output: `/3d/${slug}/vr/lod/lod-meta.json`, ...writeStreamed(levels, join(vrOutput, 'lod'), 'VR streamed SOG') };
+  }
 
   // WebXR sessions cannot run on the viewer's WebGPU device (no XRGPUBinding in Quest's
   // browser, nor in Chrome on Android), so the stock page would load on WebGPU and then ask to
   // reload on WebGL when the AR/VR button is pressed. The /vr page starts on WebGL.
   const rendererPick = "url.searchParams.has('webgl') ? 'webgl' : 'webgpu'";
-  const vrHtml = viewerHtml(`/3d/${slug}/vr/`, `${slug.replaceAll('-', ' ')} VR`);
+  const vrHtml = viewerHtml(`/3d/${slug}/vr/`, `${slug.replaceAll('-', ' ')} VR`, lod ? './lod/lod-meta.json' : './scene.sog');
   if (vrHtml.split(rendererPick).length !== 2) throw new Error('build-viewer: the viewer HTML no longer picks its renderer with the expected expression; update scripts/build-viewer.mjs.');
   writeFileSync(join(vrOutput, 'index.html'), vrHtml.replace(rendererPick, () => "'webgl' /* XR needs WebGL; see scripts/build-viewer.mjs */"));
   writeFileSync(join(vrOutput, 'index.js'), patchViewerBundle(pristineBundle, { xr: true, xrFramebufferScale: vrOptions.xrFramebufferScale, xrFarClip: vrOptions.xrFarClip, xrFixedFoveation: vrOptions.xrFixedFoveation, xrFrameRate: vrOptions.xrFrameRate, xrSortEpsilon: vrOptions.xrSortEpsilon }));
@@ -288,6 +312,7 @@ if (!flags['no-vr']) {
     sourceMiB: mib(sourceBytes),
     sogMiB: mib(sogBytes),
     vr: { ...vrOptions, ply: vrPly },
+    lod,
     frame: frameSummary
   };
   writeFileSync(join(vrOutput, 'build.json'), `${JSON.stringify(result, null, 2)}\n`);

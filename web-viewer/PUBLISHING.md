@@ -98,8 +98,9 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 | `--vr-foveation f` | 0.5 | WebXR fixed foveation 0..1 (0 = off) |
 | `--vr-frame-rate hz` | 72 | Session frame rate requested when the headset offers it (0 = browser default) |
 | `--vr-sort-epsilon e` | 0.01 | Camera movement below which the WebGL sorter does not re-sort |
+| `--vr-lod` | | Under test: also write `vr/lod/`, a streamed SOG of the culled master with the same SH cut and decimation, levels at 100, 50, 25, 10 and 5%, and point the /vr page at it |
 
-The same keys can be set per scene in `site/scenes.json` under `"vr"`, and `"web": { "splats": N, "lod": true }` for the main build; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL.
+The same keys can be set per scene in `site/scenes.json` under `"vr"`, and `"web": { "splats": N, "lod": true }` for the main build; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL. Every page takes `?budget=<millions of splats>`, which fixes the streamed splat budget on all Quality positions, in a headset session too.
 
 Check `build.json` after every build. Cloudflare Workers Static Assets limit each file to **25 MiB**; a 1.5 M splat scene comes out at about 20 MiB, which is why `--web-splats` defaults to 1.5 M. `lod/` files are about 2 MiB each. The builder warns when any file is over the limit. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#static-assets).
 
