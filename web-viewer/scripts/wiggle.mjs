@@ -18,7 +18,8 @@
  *
  * Options:
  *   --ply <path>          PLY to render (default: frame/wiggle_source.ply, an adaptive
- *                         --source-splats decimation of publish.ply, built once and cached;
+ *                         --source-splats decimation of publish.ply, cached until publish.ply
+ *                         changes;
  *                         the renderer re-uploads and re-sorts every splat per frame, so 1.5 M
  *                         costs 2.5 s a frame against 1.8 s for 500 k, which looks the same
  *                         from the opening view)
@@ -36,7 +37,7 @@
  *   --keep                keep the frame PNG/WebP folder after encoding
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -79,13 +80,16 @@ if (opts.ply) {
   ply = join(frameDir, 'wiggle_source.ply');
   const wanted = sourceSplats - (sourceSplats % 2);
   const stamp = join(frameDir, 'wiggle_source.json');
-  const fresh = existsSync(ply) && existsSync(stamp) && JSON.parse(readFileSync(stamp, 'utf8')).splats === wanted;
+  // publish.ply changes when frame.mjs pass 2 reruns (a retrained master, a new camera).
+  const { size, mtimeMs } = statSync(publishPly);
+  const cached = existsSync(ply) && existsSync(stamp) ? JSON.parse(readFileSync(stamp, 'utf8')) : null;
+  const fresh = cached?.splats === wanted && cached.fromBytes === size && cached.fromMtimeMs === mtimeMs;
   if (!fresh) {
     console.log(`Decimating ${publishPly} to ${wanted} splats for the wiggle source...`);
     const cli = join(project, 'node_modules', '@playcanvas', 'splat-transform', 'bin', 'cli.mjs');
     const r = spawnSync(process.execPath, [cli, '--no-tty', '-q', '--gpu', process.env.SPLAT_GPU ?? '0', '--overwrite', publishPly, '--decimate-adaptive', String(wanted), ply], { stdio: 'inherit' });
     if (r.status !== 0) throw new Error(`splat-transform decimation failed (${r.status})`);
-    writeFileSync(stamp, `${JSON.stringify({ splats: wanted, from: publishPly, generatedAt: new Date().toISOString() })}\n`);
+    writeFileSync(stamp, `${JSON.stringify({ splats: wanted, from: publishPly, fromBytes: size, fromMtimeMs: mtimeMs, generatedAt: new Date().toISOString() })}\n`);
   }
 } else {
   ply = publishPly;
