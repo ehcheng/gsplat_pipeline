@@ -7,7 +7,7 @@ stills / videos ─► COLMAP (structure from motion) ─► LichtFeld Studio (3
                 ─► build-viewer.mjs (SOG compression + SuperSplat viewer) ─► Cloudflare Worker at /3d/<slug>/
 ```
 
-It was built around a rig of GoPro HERO12 cameras (Wide or Linear lens modes) and also works with any camera whose lens is rectilinear or fisheye. [PROJECT.md](./PROJECT.md) describes the whole system, its design decisions and measured performance; this README is the step-by-step guide.
+It was built around a rig of GoPro HERO12 Black cameras (Wide or Linear lens modes) and works with any camera whose lens is rectilinear or fisheye. I've also used it with a Sony mirrorless camera (1,383 stills of a car in a workshop) and with phones, shooting both stills and video. [PROJECT.md](./PROJECT.md) describes the whole system, its design decisions and measured performance; this README is the step-by-step guide.
 
 **Best run with an AI coding agent** such as Claude Code or ChatGPT/Codex. The scripts automate the standard path, but most captures need some judgment along the way: picking the lens mode, reading the SfM and training metrics, retrying a stage with different settings, leveling and framing the opening view, or writing a one-off script to cull frames or mask passers-by. The pipeline was developed that way. Point the agent at this README, `PROJECT.md` and `pipeline/docs/`, and have it launch long runs as detached processes so a command timeout does not kill them.
 
@@ -77,7 +77,7 @@ Aim for 300 to 800 frames in total, walking around the subject at a couple of he
 
 With a rig of several GoPros, set every camera to the same exposure settings (shutter, ISO, white balance, lens mode) and lock them. Cameras that expose differently produce frames that disagree in brightness and color, which shows up as blotches in the splat. [SplatSync](https://echeng.com/projects/splatsync/) is a phone app that sets a whole rig to identical, locked settings from one QR code (GoPro Labs firmware); it is not distributed yet.
 
-No GoPro? A single handheld video from a phone works well. Put it in `raw\cam1.mp4` and run with `-Lens pinhole -SharpestOf 5`, which keeps the sharpest frame of every five instead of sampling at a fixed rate. See [pipeline/docs/PHONE_VIDEO.md](./pipeline/docs/PHONE_VIDEO.md) for shooting tips and for masking people who walk through the shot.
+Other cameras: stills from a mirrorless camera or a phone go in `cam1` like any other camera's; run with `-Lens pinhole` (or `fisheye` for a fisheye lens). A single handheld phone video also works well. Put it in `raw\cam1.mp4` and run with `-Lens pinhole -SharpestOf 5`, which keeps the sharpest frame of every five instead of sampling at a fixed rate. See [pipeline/docs/PHONE_VIDEO.md](./pipeline/docs/PHONE_VIDEO.md) for shooting tips and for masking people who walk through the shot.
 
 ### 2. Know the lens mode
 
