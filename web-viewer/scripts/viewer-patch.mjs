@@ -285,15 +285,22 @@ const KEY_LOOK_APPLY = `        // I/J/K/L look with glide (scripts/viewer-patch
 // on a shell at 300 x capture radius (about 1000 units on a typical scene, up to 1.25 x that),
 // so in a headset the sky and far hills could be cut off. 4000 keeps every shell inside.
 // xrFixedFoveation: WebXR fixed foveated rendering level 0..1 on the XR layer (Quest shades the
-// periphery at lower density; nearly free, the stock viewer leaves it off). Level 1 showed a
-// visible coarse patch at the nasal edge of the left eye on Quest 3; 0.5 does not. xrFrameRate: the
+// periphery at lower density). Off by default: on Quest 3 level 1 showed a coarse patch at the
+// nasal edge of the left eye, and with viewer 1.38 level 0.5 shows a square in the left eye's
+// lower right that carries the right eye's image (2026-10-25). ?foveation= tests a level. xrFrameRate: the
 // session frame rate to request when the headset offers it (Quest 3's browser can run 90 Hz;
 // 72 Hz gives every frame 25% more time). 0 leaves either one at the browser default.
 // xrSortEpsilon: the WebGL path sorts every splat on a worker whenever the camera moves more
 // than 1e-3 units or 1e-3 in direction (0.06 degrees), which a head in a headset does every
 // frame. 0.01 (1 cm, 0.6 degrees) re-sorts only on real motion; the order error at that
 // scale is invisible.
-export const XR_DEFAULTS = Object.freeze({ xr: false, xrFramebufferScale: 0.7, xrFarClip: 4000, xrFixedFoveation: 0.5, xrFrameRate: 72, xrSortEpsilon: 0.01 });
+// XR_LADDER: a standalone headset's streamed (LOD) splat budget per Quality position, millions;
+// stock is 0.5, 1, 2 and no Max. On Quest 3, 0.35 M is smooth and 0.5 M acceptable but not
+// quite (2026-10-25), so Performance, the Quest default, is 0.35 and the slider (set on the 2D
+// page before entering VR) offers more. The /vr page uses it on the headset outside the session
+// too, so the slider shows the budget the session will draw. Single-file scenes are unaffected.
+const XR_LADDER = [0.35, 0.5, 1, 2];
+export const XR_DEFAULTS = Object.freeze({ xr: false, xrFramebufferScale: 0.7, xrFarClip: 4000, xrFixedFoveation: 0, xrFrameRate: 72, xrSortEpsilon: 0.01 });
 
 const replaceOnce = (source, needle, replacement) => {
   if (source.split(needle).length !== 2) {
@@ -430,6 +437,13 @@ export function patchViewerBundle(source, options = {}) {
         `        const xrParam = ${xrParamFn};\n` +
         `        try { xr.fixedFoveation = Math.min(1, Math.max(0, xrParam('foveation', ${xrFixedFoveation}))); } catch { /* layer without foveation */ }\n` +
         `        try { const fr = xrParam('hz', ${xrFrameRate}); const rates = xr.supportedFrameRates; if (fr > 0 && rates && rates.includes(fr)) xr.updateTargetFrameRate(fr); } catch { /* not supported */ }\n`
+    );
+    // Headset budgets (see XR_LADDER).
+    patched = replaceOnce(patched, '    standaloneXr: [0.5, 1, 2, null]\n', `    standaloneXr: [${XR_LADDER.join(', ')}] // (scripts/viewer-patch.mjs)\n`);
+    patched = replaceOnce(
+      patched,
+      '        const ladder = standaloneHeadset && this.state.xrMode !== null ? LADDERS.standaloneXr : LADDERS[this.deviceClass.ladder];\n',
+      '        const ladder = standaloneHeadset ? LADDERS.standaloneXr : LADDERS[this.deviceClass.ladder]; // in and out of the session (scripts/viewer-patch.mjs)\n'
     );
   } else {
     // Main build: no AR/VR. The /vr build of the same scene carries them.

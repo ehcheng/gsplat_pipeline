@@ -258,8 +258,8 @@ if (!flags['no-vr']) {
   transform([vrPly, '-H', String(vrOptions.sh), sog], 'VR SOG');
 
   // --vr-lod (under test, 2026-10-24): stream the culled master with the same SH cut and
-  // decimation, levels at 100, 50, 25, 10 and 5%, so a headset's budget (the viewer's 0.5, 1,
-  // 2 M ladder, or ?budget=<millions> on the URL) is spent on the nearest detail. scene.sog
+  // decimation, levels at 100, 50, 25, 10 and 5%, so a headset's budget (XR_LADDER in viewer-patch.mjs, 0.35,
+  // 0.5, 1, 2 M, or ?budget=<millions> on the URL) is spent on the nearest detail. scene.sog
   // stays as the fallback.
   let lod = null;
   if (vrOptions.lod) {

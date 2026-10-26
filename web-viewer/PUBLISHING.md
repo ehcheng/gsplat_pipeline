@@ -95,7 +95,7 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 | `--vr-decimate adaptive\|uniform` | uniform | `uniform` thins everywhere (best on Quest 3); `adaptive` keeps subject detail but leaves nearly as many overlapping layers over a dense subject as the full scene |
 | `--vr-framebuffer-scale s` | 0.7 | XR framebuffer scale used by the viewer |
 | `--vr-far-clip d` | 4000 | XR far clip; must stay beyond the frame.mjs far shell |
-| `--vr-foveation f` | 0.5 | WebXR fixed foveation 0..1 (0 = off) |
+| `--vr-foveation f` | 0 | WebXR fixed foveation 0..1 (0 = off; 0.5 and 1 showed left-eye artifacts on Quest 3) |
 | `--vr-frame-rate hz` | 72 | Session frame rate requested when the headset offers it (0 = browser default) |
 | `--vr-sort-epsilon e` | 0.01 | Camera movement below which the WebGL sorter does not re-sort |
 | `--vr-lod` | | Under test: also write `vr/lod/`, a streamed SOG of the culled master with the same SH cut and decimation, levels at 100, 50, 25, 10 and 5%, and point the /vr page at it |

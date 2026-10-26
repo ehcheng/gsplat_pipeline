@@ -220,7 +220,7 @@ Output: `dist/3d/<slug>/{index.html, index.js, scene.sog, og.jpg, social.json, b
    | `decimate` | `--vr-decimate adaptive\|uniform` | uniform | Decimation mode |
    | `xrFramebufferScale` | `--vr-framebuffer-scale s` | 0.7 | XR framebuffer scale, in (0, 1]; 0.7 is 51% fewer pixels per eye |
    | `xrFarClip` | `--vr-far-clip d` | 4000 | XR far clip in scene units, at least 1000 |
-   | `xrFixedFoveation` | `--vr-foveation f` | 0.5 | WebXR fixed foveation 0..1; level 1 showed a coarse patch at the nasal edge of the left eye on Quest 3 |
+   | `xrFixedFoveation` | `--vr-foveation f` | 0 | WebXR fixed foveation 0..1; level 1 showed a coarse patch at the nasal edge of the left eye on Quest 3, and 0.5 under viewer 1.38 a square of the right eye's image in the left eye |
    | `xrFrameRate` | `--vr-frame-rate hz` | 72 | Session frame rate requested when the headset offers it |
    | `xrSortEpsilon` | `--vr-sort-epsilon e` | 0.01 | Camera movement below which the WebGL sorter does not re-sort |
 
