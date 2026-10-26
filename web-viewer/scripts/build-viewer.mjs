@@ -43,11 +43,9 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderViewerHtml } from '@playcanvas/supersplat-viewer';
-import { defaultSettings } from '@playcanvas/supersplat-viewer/settings';
 import { loadRegistry } from './site.mjs';
 import { writeSocial } from './social.mjs';
-import { patchViewerBundle, XR_DEFAULTS } from './viewer-patch.mjs';
+import { patchViewerBundle, viewerPage, XR_DEFAULTS } from './viewer-patch.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const project = resolve(here, '..');
@@ -152,23 +150,8 @@ const source = usePublishPly ? publishPly : input;
 const actions = !usePublishPly && frame?.rotate ? ['-r', frame.rotate.join(',')] : [];
 const sceneDir = frame ? dirname(dirname(frameCandidate)) : dirname(dirname(input));
 
-const settings = defaultSettings('object');
-if (frame?.chosen?.camera) settings.cameras = [{ initial: frame.chosen.camera }];
-
-const viewerHtml = (baseHref, title, contentUrl = './scene.sog') =>
-  renderViewerHtml({
-    bootstrap: {
-      contentUrl,
-      settings
-    },
-    baseHref,
-    backgroundColor: [0.025, 0.025, 0.03],
-    headExtras: [
-      '<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">',
-      '<meta name="color-scheme" content="dark">'
-    ].join(''),
-    inlineCss: true
-  }).replace('<title>SuperSplat Viewer</title>', `<title>${title}</title>`);
+const viewerHtml = (baseHref, title, contentUrl = './scene.sog', xr = false) =>
+  viewerPage({ baseHref, title, contentUrl, camera: frame?.chosen?.camera ?? null, xr });
 
 const frameSummary = frame
   ? { file: frameCandidate, publishPly: usePublishPly ? publishPly : null, rotate: frame.rotate ?? null, farShell: frame.farShell ?? null, camera: frame.chosen?.camera ?? null }
@@ -293,13 +276,8 @@ if (!flags['no-vr']) {
     lod = { output: `/3d/${slug}/vr/lod/lod-meta.json`, ...writeStreamed(levels, join(vrOutput, 'lod'), 'VR streamed SOG') };
   }
 
-  // WebXR sessions cannot run on the viewer's WebGPU device (no XRGPUBinding in Quest's
-  // browser, nor in Chrome on Android), so the stock page would load on WebGPU and then ask to
-  // reload on WebGL when the AR/VR button is pressed. The /vr page starts on WebGL.
-  const rendererPick = "url.searchParams.has('webgl') ? 'webgl' : 'webgpu'";
-  const vrHtml = viewerHtml(`/3d/${slug}/vr/`, `${slug.replaceAll('-', ' ')} VR`, lod ? './lod/lod-meta.json' : './scene.sog');
-  if (vrHtml.split(rendererPick).length !== 2) throw new Error('build-viewer: the viewer HTML no longer picks its renderer with the expected expression; update scripts/build-viewer.mjs.');
-  writeFileSync(join(vrOutput, 'index.html'), vrHtml.replace(rendererPick, () => "'webgl' /* XR needs WebGL; see scripts/build-viewer.mjs */"));
+  // The /vr page starts on WebGL (see viewerPage in scripts/viewer-patch.mjs).
+  writeFileSync(join(vrOutput, 'index.html'), viewerHtml(`/3d/${slug}/vr/`, `${slug.replaceAll('-', ' ')} VR`, lod ? './lod/lod-meta.json' : './scene.sog', true));
   writeFileSync(join(vrOutput, 'index.js'), patchViewerBundle(pristineBundle, { xr: true, xrFramebufferScale: vrOptions.xrFramebufferScale, xrFarClip: vrOptions.xrFarClip, xrFixedFoveation: vrOptions.xrFixedFoveation, xrFrameRate: vrOptions.xrFrameRate, xrSortEpsilon: vrOptions.xrSortEpsilon }));
 
   const sogBytes = statSync(sog).size;

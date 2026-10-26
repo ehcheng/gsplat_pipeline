@@ -54,11 +54,16 @@
 // stops working. For small z the two agree, so wheel and slow pinch feel unchanged.
 //
 // `node scripts/viewer-patch.mjs` re-patches every scene already in dist/3d (main and /vr) from
-// the pristine bundle in node_modules (then deploy).
+// the pristine bundle in node_modules, and re-renders each index.html from the viewer's current
+// template, keeping the page's title, base href, content URL and opening camera (then deploy).
+// The page must follow the bundle: 1.38 builds its UI in script, so markup from older
+// templates no longer matches.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { renderViewerHtml } from '@playcanvas/supersplat-viewer';
+import { defaultSettings } from '@playcanvas/supersplat-viewer/settings';
 
 const GAMEPAD_DEVICE = String.raw`// ---- user-facing "Invert Y-Axis" setting (see scripts/viewer-patch.mjs) ----
 const lookSettings = {
@@ -425,6 +430,40 @@ export function patchViewerBundle(source, options = {}) {
   return patched;
 }
 
+// The page around the bundle. The /vr page (xr) starts on WebGL: WebXR sessions cannot run on
+// the viewer's WebGPU device (no XRGPUBinding in Quest's browser, nor in Chrome on Android), so
+// the stock page would load on WebGPU and then ask to reload on WebGL at the AR/VR button.
+export function viewerPage({ baseHref, title, contentUrl = './scene.sog', camera = null, xr = false }) {
+  const settings = defaultSettings('object');
+  if (camera) settings.cameras = [{ initial: camera }];
+  const html = renderViewerHtml({
+    bootstrap: { contentUrl, settings },
+    baseHref,
+    backgroundColor: [0.025, 0.025, 0.03],
+    headExtras: [
+      '<meta name="robots" content="noindex,nofollow,noarchive,nosnippet">',
+      '<meta name="color-scheme" content="dark">'
+    ].join(''),
+    inlineCss: true
+  }).replace('<title>SuperSplat Viewer</title>', () => `<title>${title}</title>`);
+  if (!xr) return html;
+  const rendererPick = "url.searchParams.has('webgl') ? 'webgl' : 'webgpu'";
+  if (html.split(rendererPick).length !== 2) throw new Error('viewer-patch: the viewer HTML no longer picks its renderer with the expected expression; update scripts/viewer-patch.mjs.');
+  return html.replace(rendererPick, () => "'webgl' /* XR needs WebGL; see scripts/viewer-patch.mjs */");
+}
+
+// Reads back what viewerPage was given from a built page (any template version since the
+// sse-bootstrap block).
+const readPage = (file) => {
+  const html = readFileSync(file, 'utf8');
+  const bootstrap = html.match(/<script type="application\/json" id="sse-bootstrap">([\s\S]*?)<\/script>/);
+  const baseHref = html.match(/<base href="([^"]*)">/);
+  const title = html.match(/<title>([^<]*)<\/title>/);
+  if (!bootstrap || !baseHref || !title) throw new Error(`viewer-patch: ${file} has no sse-bootstrap block, base href or title; rebuild it with build-viewer.mjs.`);
+  const { contentUrl, settings } = JSON.parse(bootstrap[1]);
+  return { baseHref: baseHref[1], title: title[1], contentUrl, camera: settings?.cameras?.[0]?.initial ?? null };
+};
+
 // CLI: re-patch every built scene from the pristine bundle.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const project = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -434,10 +473,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const root = join(project, 'dist', '3d');
   const scenes = existsSync(root) ? readdirSync(root).filter((name) => statSync(join(root, name)).isDirectory() && existsSync(join(root, name, 'index.html'))) : [];
   for (const scene of scenes) {
+    writeFileSync(join(root, scene, 'index.html'), viewerPage(readPage(join(root, scene, 'index.html'))));
     writeFileSync(join(root, scene, 'index.js'), main);
-    console.log(`patched dist/3d/${scene}/index.js (${(main.length / 1048576).toFixed(2)} MiB, no AR/VR)`);
+    console.log(`patched dist/3d/${scene}/index.{html,js} (${(main.length / 1048576).toFixed(2)} MiB, no AR/VR)`);
     const vrDir = join(root, scene, 'vr');
     if (existsSync(join(vrDir, 'index.html'))) {
+      writeFileSync(join(vrDir, 'index.html'), viewerPage({ ...readPage(join(vrDir, 'index.html')), xr: true }));
       // The /vr build records its framebuffer scale in build.json so a re-patch keeps it.
       const buildJson = join(vrDir, 'build.json');
       const built = existsSync(buildJson) ? JSON.parse(readFileSync(buildJson, 'utf8')).vr ?? {} : {};
@@ -445,7 +486,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       for (const key of ['xrFramebufferScale', 'xrFarClip', 'xrFixedFoveation', 'xrFrameRate', 'xrSortEpsilon']) if (built[key] !== undefined) opts[key] = built[key];
       const effective = { ...XR_DEFAULTS, ...opts };
       writeFileSync(join(vrDir, 'index.js'), patchViewerBundle(pristine, opts));
-      console.log(`patched dist/3d/${scene}/vr/index.js (AR/VR, framebuffer x${effective.xrFramebufferScale}, far clip ${effective.xrFarClip}, foveation ${effective.xrFixedFoveation}, ${effective.xrFrameRate || 'default'} Hz)`);
+      console.log(`patched dist/3d/${scene}/vr/index.{html,js} (AR/VR, framebuffer x${effective.xrFramebufferScale}, far clip ${effective.xrFarClip}, foveation ${effective.xrFixedFoveation}, ${effective.xrFrameRate || 'default'} Hz)`);
     }
   }
   if (scenes.length === 0) console.log('no built scenes under dist/3d');
