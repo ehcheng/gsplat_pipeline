@@ -234,7 +234,7 @@ The stock SuperSplat gamepad handling turns at about 9°/s with a linear stick a
 
 **Orbit by default.** Every device starts in Orbit around the opening camera's target: drag orbits the subject, two fingers or right-drag pan, pinch or wheel zooms. (The stock viewer picks Orbit only when the opening camera is outside the scene bounds, which never holds once the far shell is in place.) **Keyboard look:** I/J/K/L turn the view like a digital right stick at 0.6× the gamepad rates, with eased starts and stops, so W/A/S/D + Q/E and I/J/K/L fly two-handed.
 
-**AR/VR.** The main build forces `state.hasAR` and `state.hasVR` false, so the buttons never appear on the full scene. The `/vr` build keeps them and tunes the session with the levers in section 7.2. Quest's browser identifies as Linux rather than Android, so both builds also turn Performance Mode on by default for an `OculusBrowser`/`Quest` user agent.
+**AR/VR.** The main build forces `state.hasAR` and `state.hasVR` false, so the buttons never appear on the full scene. The `/vr` build keeps them and tunes the session with the levers in section 7.2. The Quality slider starts at Default (phones: 2 M streamed splats at full resolution; stock starts phones at Performance, 1 M at half resolution) and at Performance on an `OculusBrowser`/`Quest` user agent, which reports Linux rather than Android (0.35 M in a `/vr` session).
 
 The patch is anchored on exact code shapes. It refuses to run if a viewer upgrade changes them, so a layout change fails the build instead of silently shipping stock behaviour. `node scripts/viewer-patch.mjs` re-patches every built scene from the pristine bundle without reconverting, reading each `/vr` build's XR values back from `vr/build.json`.
 

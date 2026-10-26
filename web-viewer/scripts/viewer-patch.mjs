@@ -40,9 +40,11 @@
 // Keyboard look: I/J/K/L turn the view, so the keyboard alone can fly two-handed, W/A/S/D +
 // Q/E on the left hand and I/J/K/L on the right. The help panel lists them. See KEY_LOOK below.
 //
-// Quest's browser identifies as Linux, not Android, so the viewer treats it as a desktop and
-// renders the 2D page at full resolution with the desktop splat budget. Both builds default
-// Quest's Quality slider to Performance instead (the user can still move it). Stock 1.38 does
+// Quality slider defaults: stock starts phones at Performance (1 M splats at half resolution).
+// Phones start at Default instead, 2 M at full resolution (capped at 1080 px on the short
+// side): an iPhone streams 4 M smoothly (2026-10-25), and the slider still offers Performance.
+// Quest's browser identifies as Linux, not Android, so the viewer treats it as a desktop; both
+// builds start Quest at Performance (0.35 M in a /vr session, see XR_LADDER). Stock 1.38 does
 // detect Quest for XR sessions (full foveation, 72 Hz, 0.8 framebuffer at Performance); the
 // /vr build overrides those with the values below.
 //
@@ -395,12 +397,12 @@ export function patchViewerBundle(source, options = {}) {
       '\t\tthis._targetChildPose.move(offset$3.set(0, 0, zoomed - dist));\n'
   );
 
-  // Quest browser: default the Quality slider to Performance (the mobile canvas scale and splat
-  // budget). Stock treats Quest as a desktop because its browser reports one.
+  // Quality slider defaults (see the header): Performance on Quest, Default everywhere else,
+  // phones included. readPreferences' argument only picks the default; a stored choice wins.
   patched = replaceOnce(
     patched,
     '    const preferences = readPreferences(platform.mobile);\n',
-    "    const preferences = readPreferences(platform.mobile || /OculusBrowser|\\bQuest\\b/u.test(navigator.userAgent)); // Quest: Performance (scripts/viewer-patch.mjs)\n"
+    "    const preferences = readPreferences(/OculusBrowser|\\bQuest\\b/u.test(navigator.userAgent)); // Quest: Performance; phones: Default (scripts/viewer-patch.mjs)\n"
   );
 
   const hasAR = '        state.hasAR = state.canStartAR || webglAR;\n';
