@@ -1,18 +1,20 @@
 // Builds dist/3d/<slug>/ (the full scene, no AR/VR) and dist/3d/<slug>/vr/ (a reduced scene for
 // headsets and phone AR, with the viewer's AR/VR buttons) from one PLY.
 //
-//   node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod]
-//                                 [--web-splats N] [--vr-lod]
+//   node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--no-lod]
+//                                 [--web-splats N] [--no-vr-lod]
 //                                 [--vr-splats N] [--vr-sh 0|1|2|3] [--vr-min-opacity a]
 //                                 [--vr-framebuffer-scale s]
 //
 // The main build's scene.sog is one file, and Cloudflare serves files of at most 25 MiB, which
 // is about 1.5 M splats. Masters trained above that (the 5 M default since 2026-10-23) are
 // decimated adaptively to --web-splats (default 1500000; 0 keeps every splat) for scene.sog.
-// --lod also writes lod/: a streamed SOG of the full master plus adaptive decimations to 50%,
+// The build also writes lod/: a streamed SOG of the full master plus adaptive decimations to 50%,
 // 25% and 10%, in chunks of about 2 MiB, and points the page at it. The viewer then loads the
 // level each chunk needs within the quality slider's splat budget (desktop 2-16 M, mobile
-// 1-8 M). scene.sog is still written, for the catalog export and as a fallback.
+// 1-8 M). scene.sog is still written, for the catalog export and as a fallback. Streaming is the
+// default since 2026-10-25 (tested on desktop, iPhone up to 4 M and Quest 3); --no-lod, or
+// "web": { "lod": false } in the registry, publishes scene.sog alone.
 //
 // The /vr build is served at the scene URL plus /vr, behind the same password gate. Why a second
 // build instead of one scene for everything: the full 1.5 M splat scenes render fine on a
@@ -56,14 +58,14 @@ const flags = {};
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
-  if (a === '--no-vr' || a === '--vr-only' || a === '--lod' || a === '--vr-lod') flags[a.slice(2)] = true;
+  if (['--no-vr', '--vr-only', '--lod', '--vr-lod', '--no-lod', '--no-vr-lod'].includes(a)) flags[a.slice(2)] = true;
   else if (a.startsWith('--')) flags[a.slice(2)] = argv[++i];
   else positional.push(a);
 }
 const [inputArg, slug = 'scene'] = positional;
 
 if (!inputArg) {
-  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--lod] [--web-splats N] [--vr-lod] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
+  console.error('Usage: node scripts/build-viewer.mjs <input.ply> [slug] [--no-vr | --vr-only] [--no-lod] [--web-splats N] [--no-vr-lod] [--vr-splats N] [--vr-sh n] [--vr-min-opacity a] [--vr-framebuffer-scale s]');
   process.exit(2);
 }
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(slug)) {
@@ -83,7 +85,7 @@ const registered = Object.hasOwn(registry, slug) ? registry[slug] : null;
 // subject as the full scene (measured: 159 vs 223 layers per pixel 2 m from a group of people,
 // against 115 for uniform at the same count), so a scene that stutters only while looking at
 // the subject wants 'uniform'.
-const VR_DEFAULTS = Object.freeze({ splats: 350000, sh: 1, minOpacity: 0.05, decimate: 'uniform', xrFramebufferScale: XR_DEFAULTS.xrFramebufferScale, xrFarClip: XR_DEFAULTS.xrFarClip, xrFixedFoveation: XR_DEFAULTS.xrFixedFoveation, xrFrameRate: XR_DEFAULTS.xrFrameRate, xrSortEpsilon: XR_DEFAULTS.xrSortEpsilon });
+const VR_DEFAULTS = Object.freeze({ splats: 350000, sh: 1, minOpacity: 0.05, decimate: 'uniform', xrFramebufferScale: XR_DEFAULTS.xrFramebufferScale, xrFarClip: XR_DEFAULTS.xrFarClip, xrFixedFoveation: XR_DEFAULTS.xrFixedFoveation, xrFrameRate: XR_DEFAULTS.xrFrameRate, xrSortEpsilon: XR_DEFAULTS.xrSortEpsilon, lod: true });
 const vrOptions = {
   ...VR_DEFAULTS,
   ...(registered?.vr ?? {}),
@@ -96,16 +98,18 @@ const vrOptions = {
   ...(flags['vr-foveation'] !== undefined ? { xrFixedFoveation: Number(flags['vr-foveation']) } : {}),
   ...(flags['vr-frame-rate'] !== undefined ? { xrFrameRate: Number(flags['vr-frame-rate']) } : {}),
   ...(flags['vr-sort-epsilon'] !== undefined ? { xrSortEpsilon: Number(flags['vr-sort-epsilon']) } : {}),
-  ...(flags['vr-lod'] ? { lod: true } : {})
+  ...(flags['vr-lod'] ? { lod: true } : {}),
+  ...(flags['no-vr-lod'] ? { lod: false } : {})
 };
 if (!(Number.isInteger(vrOptions.splats) && vrOptions.splats >= 10000)) throw new Error(`vr.splats must be an integer >= 10000, got ${vrOptions.splats}`);
-// Main build overrides live in the registry under "web": { "splats": N, "lod": true }.
+// Main build overrides live in the registry under "web": { "splats": N, "lod": false }.
 const webOptions = {
   splats: 1500000,
-  lod: false,
+  lod: true,
   ...(registered?.web ?? {}),
   ...(flags['web-splats'] !== undefined ? { splats: Number(flags['web-splats']) } : {}),
-  ...(flags.lod ? { lod: true } : {})
+  ...(flags.lod ? { lod: true } : {}),
+  ...(flags['no-lod'] ? { lod: false } : {})
 };
 if (!(Number.isInteger(webOptions.splats) && (webOptions.splats === 0 || webOptions.splats >= 10000))) throw new Error(`web.splats must be 0 or an integer >= 10000, got ${webOptions.splats}`);
 if (!['adaptive', 'uniform'].includes(vrOptions.decimate)) throw new Error(`vr.decimate must be 'adaptive' or 'uniform', got ${vrOptions.decimate}`);
@@ -257,7 +261,7 @@ if (!flags['no-vr']) {
   transform([source, ...actions, ...cull, decimate, String(target), vrPly], 'VR decimation');
   transform([vrPly, '-H', String(vrOptions.sh), sog], 'VR SOG');
 
-  // --vr-lod (under test, 2026-10-24): stream the culled master with the same SH cut and
+  // VR streaming (default; --no-vr-lod or "vr": { "lod": false } turns it off): stream the culled master with the same SH cut and
   // decimation, levels at 100, 50, 25, 10 and 5%, so a headset's budget (XR_LADDER in viewer-patch.mjs, 0.35,
   // 0.5, 1, 2 M, or ?budget=<millions> on the URL) is spent on the nearest detail. scene.sog
   // stays as the fallback.

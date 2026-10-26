@@ -372,7 +372,7 @@ Git holds no captures, models, renders, site configuration or per-run history (`
 - **Peak VRAM reads 0.** `nvidia-smi` does not attribute memory to the LichtFeld process.
 - **No blur rejection.** Soft frames are removed by hand.
 - **The front is chosen by hand.** The pass-1 subject center can land in tree canopy on wooded scenes, and cramped sites can put the camera behind structures.
-- **25 MiB asset limit.** `scene.sog` holds at most about 1.5 M splats, so the builder decimates larger masters for it; the full master goes out as a streamed SOG (`--lod`) in chunks of about 2 MiB.
+- **25 MiB asset limit.** `scene.sog` holds at most about 1.5 M splats, so the builder decimates larger masters for it; the full master goes out as a streamed SOG (the default; `--no-lod` skips it) in chunks of about 2 MiB.
 - **`/3d/` is the fixed path prefix.** The Worker, builder and catalog all assume it.
 - **Wide vs Linear on the same subject is unmeasured.**
 - **`/vr` runs on WebGL with the CPU sorter**, so splat count matters there over and above overdraw. Streamed SOG with LOD was considered and rejected: it thins by chunk distance and leaves the near subject at full density, which is exactly where the headset stutters.

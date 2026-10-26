@@ -86,7 +86,7 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--web-splats N` | 1500000 | Splat count for the main `scene.sog`; larger masters are decimated adaptively to it (0 keeps every splat) |
-| `--lod` | | Also write `lod/`, a streamed SOG of the full master with levels at 100, 50, 25 and 10%, and point the page at it. Adds about 6 min for 5 M splats |
+| `--no-lod` | | Skip `lod/`. By default the build also writes `lod/`, a streamed SOG of the full master with levels at 100, 50, 25 and 10%, and points the page at it (about 6 min more for 5 M splats); `scene.sog` stays as the fallback and for the catalog |
 | `--no-vr` | | Skip the `vr/` build |
 | `--vr-only` | | Rebuild only `vr/` under an existing main build |
 | `--vr-splats N` | 350000 | Target splat count (forced even) |
@@ -98,9 +98,9 @@ The `vr/` folder is the headset build (see the top of `scripts/build-viewer.mjs`
 | `--vr-foveation f` | 0 | WebXR fixed foveation 0..1 (0 = off; 0.5 and 1 showed left-eye artifacts on Quest 3) |
 | `--vr-frame-rate hz` | 72 | Session frame rate requested when the headset offers it (0 = browser default) |
 | `--vr-sort-epsilon e` | 0.01 | Camera movement below which the WebGL sorter does not re-sort |
-| `--vr-lod` | | Under test: also write `vr/lod/`, a streamed SOG of the culled master with the same SH cut and decimation, levels at 100, 50, 25, 10 and 5%, and point the /vr page at it |
+| `--no-vr-lod` | | Skip `vr/lod/`. By default the build also writes `vr/lod/`, a streamed SOG of the culled master with the same SH cut and decimation, levels at 100, 50, 25, 10 and 5%, and points the /vr page at it. Quest 3 streams 0.35 M at the default Performance position (0.5, 1 and 2 M above it) |
 
-The same keys can be set per scene in `site/scenes.json` under `"vr"`, and `"web": { "splats": N, "lod": true }` for the main build; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL. Every page takes `?budget=<millions of splats>`, which fixes the streamed splat budget on all Quality positions, in a headset session too.
+The same keys can be set per scene in `site/scenes.json` under `"vr"`, and `"web": { "splats": N, "lod": false }` for the main build; command-line flags win. For in-headset A/B tests without a rebuild, the `/vr` page accepts `?fbscale=0.8`, `?foveation=0` and `?hz=90` on its URL. Every page takes `?budget=<millions of splats>`, which fixes the streamed splat budget on all Quality positions, in a headset session too.
 
 Check `build.json` after every build. Cloudflare Workers Static Assets limit each file to **25 MiB**; a 1.5 M splat scene comes out at about 20 MiB, which is why `--web-splats` defaults to 1.5 M. `lod/` files are about 2 MiB each. The builder warns when any file is over the limit. See [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#static-assets).
 

@@ -119,7 +119,7 @@ Look at the sheet, then run pass 2 with the azimuth you want (optionally `--elev
 node scripts\build-viewer.mjs ..\_workspace\20260912_park_bench_wide\lfs\splat_30000.ply park-bench
 ```
 
-Slugs are lowercase letters, digits and single hyphens. The builder uses `frame\publish.ply` and the opening camera from step 4, converts to SOG (a 1.5 M splat PLY becomes about 20 MiB; larger masters are decimated to 1.5 M for this file, and `--lod` adds a streamed copy of the full master), writes the patched viewer page, the link-preview image and a `/vr` variant for headsets and phone AR. See `web-viewer/PUBLISHING.md` for options.
+Slugs are lowercase letters, digits and single hyphens. The builder uses `frame\publish.ply` and the opening camera from step 4, converts to SOG (a 1.5 M splat PLY becomes about 20 MiB; larger masters are decimated to 1.5 M for this file), adds a streamed copy of the full master that the page loads by level of detail (`--no-lod` skips it), writes the patched viewer page, the link-preview image and a `/vr` variant for headsets and phone AR, which streams too. See `web-viewer/PUBLISHING.md` for options.
 
 ### 6. Register, deploy, verify
 
@@ -141,7 +141,7 @@ Open `https://<your domain>/3d/park-bench/` in a private window. For password-pr
 - `pipeline/tests/smoke.ps1` checks the `run.ps1` contract, tool discovery and lens resolution without a GPU.
 - `@playcanvas/splat-transform` 3.4.0 crashed silently (exit code `0xC0000409`) writing SOG on the GPU from an odd number of splats, and in GPU decimation. 3.10.2 fixes both, so `build-viewer.mjs` and `wiggle.mjs` decimate on the GPU again (about 9 s for 1.5 M splats, against 40 to 70 s on the CPU); targets are still kept even.
 - Large single-camera sets (more than about 1,000 images) map much faster with COLMAP's `global_mapper` than with the incremental mapper; see `pipeline/docs/PIPELINE.md`.
-- Cloudflare limits each static file to 25 MiB, about 1.5 M splats as one `scene.sog`. The builder decimates larger masters to fit (`--web-splats`); `--lod` serves the full master as a streamed SOG in chunks of about 2 MiB.
+- Cloudflare limits each static file to 25 MiB, about 1.5 M splats as one `scene.sog`. The builder decimates larger masters to fit (`--web-splats`) and by default serves the full master as a streamed SOG in chunks of about 2 MiB.
 
 ## License
 
