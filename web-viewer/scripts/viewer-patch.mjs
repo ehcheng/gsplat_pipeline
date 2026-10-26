@@ -46,12 +46,16 @@
 // detect Quest for XR sessions (full foveation, 72 Hz, 0.8 framebuffer at Performance); the
 // /vr build overrides those with the values below.
 //
-// Orbit zoom is exponential: distance x e^z instead of stock PlayCanvas's distance x (1 + z),
-// where z is a frame's pinch, wheel or trackpad-pinch delta. With the stock formula, zooming in
-// and back out by the same amount leaves the camera closer ((1 + z)(1 - z) = 1 - z^2), and a
-// fast pinch-in (z <= -1 in one frame: about 150 px of finger travel, easier at low frame
-// rates) pins the distance at the 0.01 floor, where zoom is proportional to distance and pinch
-// stops working. For small z the two agree, so wheel and slow pinch feel unchanged.
+// Orbit zoom, for pinch, wheel and trackpad pinch alike (z is a frame's zoom delta; D is the
+// opening orbit distance, the scene's scale):
+//   - exponential, distance x e^z, at distances above ZOOM_SPEED_FLOOR x D. Stock PlayCanvas
+//     uses distance x (1 + z): zooming in and back out by the same amount leaves the camera
+//     closer ((1 + z)(1 - z) = 1 - z^2), and a fast pinch-in (z <= -1 in one frame, about 150 px
+//     of finger travel) pins the distance at its 0.01 floor.
+//   - below that, steps sized as if at ZOOM_SPEED_FLOOR x D, so zoom near the orbit centre
+//     neither crawls nor needs as many pinch-outs as there were pinch-ins.
+//   - zoom-in stops at ZOOM_MIN x D; pinches past it are dropped, so one pinch-out leaves.
+// For small z at normal distances this matches stock, so wheel and slow pinch feel unchanged.
 //
 // `node scripts/viewer-patch.mjs` re-patches every scene already in dist/3d (main and /vr) from
 // the pristine bundle in node_modules, and re-renders each index.html from the viewer's current
@@ -372,11 +376,16 @@ export function patchViewerBundle(source, options = {}) {
     '        if (!isFirstPerson && (this._axis.length() > 0 || this._lookAxis[0] !== 0 || this._lookAxis[1] !== 0)) {\n'
   );
 
-  // Exponential orbit zoom (see the header): pinch, wheel and trackpad all pass through here.
+  // Orbit zoom (see the header): pinch, wheel and trackpad all pass through here.
+  const ZOOM_MIN = 0.02;
+  const ZOOM_SPEED_FLOOR = 0.25;
   patched = replaceOnce(
     patched,
     '\t\tthis._targetChildPose.move(offset$3.set(0, 0, dist * (1 + move[2]) - dist));\n',
-    '\t\tthis._targetChildPose.move(offset$3.set(0, 0, dist * Math.exp(move[2]) - dist)); // exponential zoom (scripts/viewer-patch.mjs)\n'
+    '\t\t// Zoom scaled to the opening orbit distance (scripts/viewer-patch.mjs).\n' +
+      '\t\tconst zoomRef = this._zoomRef ??= dist;\n' +
+      `\t\tconst zoomed = Math.max(Math.min(dist, ${ZOOM_MIN} * zoomRef), dist + Math.max(dist, ${ZOOM_SPEED_FLOOR} * zoomRef) * Math.expm1(move[2]));\n` +
+      '\t\tthis._targetChildPose.move(offset$3.set(0, 0, zoomed - dist));\n'
   );
 
   // Quest browser: default the Quality slider to Performance (the mobile canvas scale and splat
