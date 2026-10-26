@@ -133,11 +133,12 @@ console.log(`Loading ${ply} ...`);
 const t0 = performance.now();
 const readFs = new st.MemoryReadFileSystem();
 readFs.set('scene.ply', new Uint8Array(readFileSync(ply)));
+// splat-transform 3.10 renders from a chunk source and its pool (3.4 took a DataTable); the
+// source stays open for every frame.
 const sources = await st.readFile({ filename: 'scene.ply', inputFormat: 'ply', fileSystem: readFs });
+const source = sources[0];
 const pool = st.createChunkDataPool();
-const dataTable = await st.materializeToDataTable(sources[0], pool);
-for (const s of sources) await s.close?.();
-console.log(`Loaded ${dataTable.numRows} splats in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+console.log(`Loaded ${source.numRows ?? source.meta?.numRows ?? '?'} splats in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 
 // ------------------------------------------------------------------ camera path
 const cam = frame.chosen.camera;
@@ -172,7 +173,8 @@ for (let i = 0; i < renderFrames; i++) {
   const name = `frame_${String(i).padStart(4, '0')}.webp`;
   await st.writeImage({
     filename: name,
-    dataTable,
+    source,
+    pool,
     cameraPosition: poseAt(i),
     lookAt: { x: T[0], y: T[1], z: T[2] },
     up: { x: 0, y: 1, z: 0 },
